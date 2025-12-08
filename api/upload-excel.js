@@ -1,68 +1,93 @@
-import formidable from 'formidable';
-import XLSX from 'xlsx';
-import fetch from 'node-fetch';
+import { Octokit } from "@octokit/rest";
+import multer from "multer";
+import XLSX from "xlsx";
+import fs from "fs";
+import path from "path";
+import nextConnect from "next-connect";
 
-export const config = { api: { bodyParser: false } };
+// Multer setup for temporary file storage
+const upload = multer({ dest: "/tmp" });
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+// Vercel serverless doesn't have express by default, so we use next-connect
+const apiRoute = nextConnect({
+  onError(error, req, res) {
+    res.status(500).json({ error: error.message });
+  },
+  onNoMatch(req, res) {
+    res.status(405).json({ error: `Method ${req.method} not allowed` });
+  },
+});
 
-  const form = formidable({ multiples: false });
+apiRoute.use(upload.single("file"));
 
-  form.parse(req, async (err, fields, files) => {
-    if (err) return res.status(500).json({ error: 'Error parsing form' });
+apiRoute.post(async (req, res) => {
+  try {
+    const file = req.file;
+    if (!file) throw new Error("No file uploaded");
 
-    const file = files.file;
-    if (!file) return res.status(400).json({ error: 'No file uploaded' });
+    // Read Excel
+    const workbook = XLSX.readFile(file.path);
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const data = XLSX.utils.sheet_to_json(sheet);
 
-    try {
-      // Convert Excel to JSON
-      const workbook = XLSX.readFile(file.filepath);
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const data = XLSX.utils.sheet_to_json(sheet);
-
-      const normalizeISSN = (issn) => issn ? issn.replace(/[^0-9Xx]/g, '').toUpperCase() : null;
-
-      const journals = data
-        .filter(r => r.Title && r.ISSN)
-        .map(r => ({ title: r.Title.trim(), issn: normalizeISSN(r.ISSN) }))
-        .filter(j => j.issn);
-
-      // Commit to GitHub
-      const token = process.env.GITHUB_PAT;
-      const repo = process.env.GITHUB_REPO;
-      const branch = process.env.GITHUB_BRANCH || 'main';
-      const pathInRepo = 'alljournals/journals.json';
-
-      // First, get the SHA of existing file (required for update)
-      const getRes = await fetch(`https://api.github.com/repos/${repo}/contents/${pathInRepo}?ref=${branch}`, {
-        headers: { Authorization: `token ${token}` }
-      });
-      const getData = await getRes.json();
-      const sha = getData.sha; // if file exists, required for updating
-
-      // Commit updated journals.json
-      const commitRes = await fetch(`https://api.github.com/repos/${repo}/contents/${pathInRepo}`, {
-        method: 'PUT',
-        headers: {
-          Authorization: `token ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          message: `Update journals.json via Excel upload`,
-          content: Buffer.from(JSON.stringify(journals, null, 2)).toString('base64'),
-          branch,
-          sha: sha || undefined
-        })
-      });
-
-      const commitData = await commitRes.json();
-
-      res.status(200).json({ success: true, count: journals.length, commit: commitData.html_url });
-
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: err.message });
+    // Normalize ISSN
+    function normalizeISSN(issn) {
+      if (!issn) return null;
+      return issn.replace(/[^0-9Xx]/g, "").toUpperCase();
     }
-  });
-}
+
+    const journals = data
+      .filter((row) => row.Title && row.ISSN)
+      .map((row) => ({
+        title: row.Title.trim(),
+        issn: normalizeISSN(row.ISSN),
+      }))
+      .filter((j) => j.issn);
+
+    // Commit to GitHub
+    const octokit = new Octokit({
+      auth: process.env.GITHUB_TOKEN, // set in Vercel dashboard
+    });
+
+    const owner = "hslill";
+    const repo = "journal-tracker";
+    const pathInRepo = "alljournals/journals.json";
+
+    // Get current file SHA (required to update)
+    const { data: currentFile } = await octokit.repos.getContent({
+      owner,
+      repo,
+      path: pathInRepo,
+    });
+
+    const base64Content = Buffer.from(JSON.stringify(journals, null, 2)).toString(
+      "base64"
+    );
+
+    await octokit.repos.createOrUpdateFileContents({
+      owner,
+      repo,
+      path: pathInRepo,
+      message: `Update journals.json via web upload (${new Date().toISOString()})`,
+      content: base64Content,
+      sha: currentFile.sha,
+    });
+
+    // Cleanup temp file
+    fs.unlinkSync(file.path);
+
+    res.status(200).json({ success: true, count: journals.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+export default apiRoute;
+
+// Disable default bodyParser, multer handles it
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
