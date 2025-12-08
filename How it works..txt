@@ -1,0 +1,46 @@
+How it works.
+
+DD Question:
+Let's start with this initial output table:
+18784046	Academic Radiology	Academic Radiology	Unchanged
+
+If tomorrow, let's say, BrowZine changes Academic Radiology to Academic Radiological Society Journal, and I come to my pc and decide to run index.html, what should I expect?
+
+
+ChatGPT said:
+
+If BrowZine changes the journal’s title tomorrow, here’s what will happen when you run your updated index.html:
+
+Node server fetches the latest data from BrowZine when you hit /alljournals.
+
+title will now be "Academic Radiological Society Journal".
+
+oldTitle will still be "Academic Radiology" in journals.json.
+
+Browser fetches /alljournals via fetchJournals().
+
+Comparison occurs:
+
+previousTitle = oldTitle = "Academic Radiology".
+
+title = "Academic Radiological Society Journal".
+
+changed = true because title !== previousTitle.
+
+Rendering:
+
+The row will now show:
+
+ISSN           Title                                      Previous Title       Status
+18784046       Academic Radiological Society Journal      Academic Radiology  Updated
+
+
+The row will be highlighted with the .changed class (yellow background).
+
+Next update (after you or the server run checkTitleChanges):
+
+oldTitle in journals.json will be updated to match the new title.
+
+On subsequent loads, the row will show as Unchanged until another BrowZine change occurs.
+
+So essentially, the tracker detects any title change immediately, highlights it, and then updates oldTitle to remember the new title for future comparisons.

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Journal Tracker</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif, sans-serif;
+        margin: 20px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+      th,
+      td {
+        border: 1px solid #ccc;
+        padding: 8px;
+        text-align: left;
+      }
+      th {
+        background-color: #f4f4f4;
+      }
+      .Changed {
+        background-color: #ffeb3b;
+      }
+        #filters { margin-bottom: 15px; }
+  #filters input { margin-right: 10px; padding: 5px; }
+  #stats { margin-bottom: 15px; }
+  button { margin-right: 10px; padding: 6px 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>Journal Title Tracker</h1>
+    <p>Track changes in the journal titles over time.</p>
+    <button id="updateBtn">Update</button>
+    <div id="filters">
+  <input type="text" id="searchBox" placeholder="Search ISSN or Title">
+  <label>From: <input type="date" id="fromDate"></label>
+  <label>To: <input type="date" id="toDate"></label>
+  <label>View updated only  <input type="checkbox" id="updatedOnly"></label>
+  <button id="filterBtn">Apply Filters</button>
+  <button id="exportBtn">Export CSV</button>
+  <button id="exportChangesBtn">Export Changes Only</button>
+</div>
+    <div id="loading" style="display: none">Loading journals...</div>
+    <div id="stats" style="margin: 10px 0; font-weight: bold;"></div>
+    <table id="journalTable">
+      <thead>
+        <tr>
+          <th>ISSN</th>
+          <th>Title</th>
+          <th>Previous Title</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <script>
+      let allJournals = []; 
+      const loading = document.getElementById("loading");
+      const tbody = document.querySelector("#journalTable tbody");
+      const searchBox = document.getElementById("searchBox");
+      const fromDate = document.getElementById("fromDate");
+      const toDate = document.getElementById("toDate");
+      const statsDiv = document.getElementById("stats");
+      const updatedOnlyCheckbox = document.getElementById("updatedOnly");
+
+      updatedOnlyCheckbox.addEventListener("change", applyFilters);
+      document.getElementById("filterBtn").addEventListener("click", applyFilters);
+      document.getElementById("exportBtn").addEventListener("click", () => downloadCSV("journals.csv", allJournals));
+      document.getElementById("exportChangesBtn").addEventListener("click", () => downloadCSV("journals_changes.csv", allJournals.filter(j => j.changed)));
+
+        // Fetch all journals from server including oldTitle
+      async function fetchJournals() {
+        loading.style.display = "block";
+        try {
+          const res = await fetch("/alljournals");
+          console.log("Response status:", res.status);
+          const data = await res.json();
+          console.log("Number of journals fetched:", data.length);
+          allJournals = data.map(j => ({
+      issn: j.issn,
+      title: j.title,
+      previousTitle: j.oldTitle || null,
+      changed: j.oldTitle && j.oldTitle !== j.title,
+      dateChecked: new Date().toISOString().split('T')[0] // optional, for date filtering
+    }));
+          return allJournals;
+        } catch (err) {
+          console.error("Error fetching journals:", err);
+          return [];
+        } finally {
+          loading.style.display = "none";
+        }
+      }
+
+      // Render table in chunks for performance
+      function renderTable(journals) {
+        tbody.innerHTML = "";
+        const chunkSize = 100;
+        let i = 0;
+
+        function renderChunk() {
+          const chunk = journals.slice(i, i + chunkSize);
+          chunk.forEach((j) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+        <td>${j.issn}</td>
+        <td>${j.title}</td>
+        <td>${j.previousTitle || "-"}</td>
+        <td>${j.changed ? "Updated" : "Unchanged"}</td>
+      `;
+            if (j.changed) tr.classList.add("Changed");
+            tbody.appendChild(tr);
+          });
+          i += chunkSize;
+          if (i < journals.length) setTimeout(renderChunk, 0);
+        }
+
+        renderChunk();
+        updateStats(journals);
+      }
+
+// Update stats
+function updateStats(journals) {
+  const total = journals.length;
+  const updated = journals.filter(j => j.changed).length;
+  const unchanged = total - updated;
+  statsDiv.innerHTML = `<strong>Total:</strong> ${total} | <strong>Updated:</strong> ${updated} | <strong>Unchanged:</strong> ${unchanged}`;
+}
+
+function applyFilters() {
+  let filtered = allJournals.slice();
+  const query = searchBox.value.toLowerCase().trim();
+  if (query) filtered = filtered.filter(j => j.issn.includes(query) || j.title.toLowerCase().includes(query));
+  if (fromDate.value) filtered = filtered.filter(j => j.dateChecked && new Date(j.dateChecked) >= new Date(fromDate.value));
+  if (toDate.value) filtered = filtered.filter(j => j.dateChecked && new Date(j.dateChecked) <= new Date(toDate.value));
+  if (updatedOnlyCheckbox.checked) filtered = filtered.filter(j => j.changed); 
+  renderTable(filtered);
+}
+
+function downloadCSV(filename, journals) {
+  const header = ['ISSN','Title','Previous Title','Status'];
+  const rows = journals.map(j => [j.issn,j.title,j.previousTitle || '', j.changed ? 'Updated':'Unchanged']);
+  const csv = [header, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+      // Main update function
+      async function updateJournals() {
+  await fetchJournals();
+  renderTable(allJournals);
+}
+
+// Event listeners
+document.getElementById("updateBtn").addEventListener("click", updateJournals);
+document.getElementById("filterBtn").addEventListener("click", applyFilters);
+document.getElementById("exportBtn").addEventListener("click", () => downloadCSV('all_journals.csv', allJournals));
+document.getElementById("exportChangesBtn").addEventListener("click", () => downloadCSV('changes_only.csv', allJournals.filter(j => j.changed)));
+
+// Load data on page load
+window.addEventListener("load", updateJournals);
+    </script>
+  </body>
+</html>

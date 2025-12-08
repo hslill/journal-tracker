@@ -1,0 +1,109 @@
+Exporting ISSNs from Alma
+
+export your library’s journal ISSNs using a report or bibliographic export. Here’s a step-by-step guide for creating a .txt or CSV file:
+
+Step 1: Log in to Alma
+
+Go to your Alma instance: e.g., https://YOURLIBRARY.alma.exlibrisgroup.com.
+
+Log in with your librarian or catalog manager credentials.
+
+Step 2: Open Analytics / Reports
+
+Alma has a Reports/Analytics tool for exports.
+
+Go to Analytics (may be under Resources → Analytics or Reports depending on your role).
+
+Choose the "Serials" or "Electronic Resources" subject area — these areas usually contain journal/serial metadata.
+
+You want a dataset that contains at least:
+
+ISSN
+
+Journal Title
+
+Optional: Publisher, e-ISSN, Print/Online indicator
+
+Step 3: Create a Query / Report
+
+Create a new query (or report) in Analytics.
+
+Add the fields:
+
+MMS ID (optional)
+
+Journal Title
+
+ISSN
+
+Filter if desired (e.g., only clinical journals, if you have a subject code or collection tag).
+
+Preview results to make sure you’re getting all journals.
+
+Step 4: Export the Data
+
+In Analytics, click Export.
+
+Choose a format:
+
+CSV → easiest for later conversion to JSON
+
+TXT → fine if you only need ISSNs
+
+Save the file locally, e.g., alma_issns.csv or alma_issns.txt.
+
+Step 5: Check the File
+
+If CSV, it might look like:
+
+Title,ISSN
+Journal of Clinical Studies,2044-7248
+Another Clinical Journal,1234-5678
+
+
+If TXT, you can have either one ISSN per line, or ISSN|Title for each journal.
+
+
+
+ADDITIONAL NOTES:
+With that many records, we need to plan carefully so it’s manageable and performant for your title-change tracker.
+
+Here’s how you can handle it:
+
+1️⃣ Split the Export into Chunks
+
+Alma Analytics has export limits (usually 1,000–2,000 rows per CSV).
+
+Strategy: export by collection, subject, or type (e.g., clinical journals only).
+
+This way you don’t process hundreds of thousands of unnecessary titles, and your app only tracks journals you actually care about.
+
+2️⃣ Filter to Clinical Titles Before Export
+
+Use Alma’s subject codes, collection filters, or tags.
+
+Only export journals classified as medicine/clinical.
+
+This can reduce the list from 500k to a few thousand — much more practical.
+
+3️⃣ Avoid Storing Everything in Memory
+
+Even filtered, several thousand journals can get big. Use:
+
+Streaming CSV parsing (Node.js: csv-parser, Python: pandas.read_csv with chunks)
+
+Incremental JSON updates: don’t load all titles in memory at once; process line by line.
+
+4️⃣ Automation Approach
+
+Export clinical journals in batches from Alma to CSV/TXT.
+
+Parse CSV in a Node.js script: extract ISSN and Title → save into journals.json.
+
+Monthly updates:
+
+Fetch current title via Ulrichsweb for each ISSN.
+
+Log changes.
+
+Update journals.json.
