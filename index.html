@@ -77,7 +77,7 @@
       async function fetchJournals() {
         loading.style.display = "block";
         try {
-          const res = await fetch("alljournals/");
+          const res = await fetch("/alljournals");
           console.log("Response status:", res.status);
           const data = await res.json();
           console.log("Number of journals fetched:", data.length);
