@@ -145,48 +145,6 @@ async function checkTitleChanges() {
   }
 }
 
-// xlsx to json converter
-
-const multer = require('multer');
-const XLSX = require('xlsx');
-
-// Multer config to store uploaded files temporarily
-const upload = multer({ dest: path.join(__dirname, 'tmp') });
-
-// POST endpoint to accept Excel file
-app.post('/upload-excel', upload.single('file'), (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-
-    const workbook = XLSX.readFile(req.file.path);
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const data = XLSX.utils.sheet_to_json(sheet);
-
-    // Normalize ISSN and map to {title, issn}
-    const journals = data
-      .filter(row => row.Title && row.ISSN)
-      .map(row => ({
-        title: row.Title.trim(),
-        issn: row.ISSN.replace(/[^0-9Xx]/g, '').toUpperCase()
-      }))
-      .filter(j => j.issn);
-
-    // Replace existing journals.json
-    fs.writeFileSync(path.join(__dirname, 'alljournals', 'journals.json'), JSON.stringify(journals, null, 2));
-
-    // Clean up temp file
-    fs.unlinkSync(req.file.path);
-
-    console.log(`Updated journals.json with ${journals.length} records.`);
-    res.json({ success: true, count: journals.length });
-  } catch (err) {
-    console.error('Error processing Excel upload:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-
 // -------- Start server --------
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
