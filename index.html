@@ -98,7 +98,7 @@ async function handleUpdateCollection(event) {
     const result = await res.json();
 
     if (res.ok) {
-      alert(`Updated journals.json with ${result.count} records`);
+      alert(`Updated journals.json with ${result.count} records\nCommit: ${result.commit}`);
       await updateJournals(); // reload table
     } else {
       alert('Upload failed: ' + (result.error || 'Unknown error'));
