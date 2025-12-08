@@ -6,7 +6,7 @@ import path from "path";
 import nextConnect from "next-connect";
 
 // Multer setup for temporary file storage
-const upload = multer({ dest: "/tmp" });
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Vercel serverless doesn't have express by default, so we use next-connect
 const apiRoute = nextConnect({
@@ -73,9 +73,6 @@ apiRoute.post(async (req, res) => {
       content: base64Content,
       sha: currentFile.sha,
     });
-
-    // Cleanup temp file
-    fs.unlinkSync(file.path);
 
     res.status(200).json({ success: true, count: journals.length });
   } catch (err) {
