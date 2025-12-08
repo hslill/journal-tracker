@@ -4,6 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <title>Journal Tracker</title>
+    <script src="excel-to-json.js"></script>
     <style>
       body {
         font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif, sans-serif;
@@ -43,6 +44,8 @@
   <button id="filterBtn">Apply Filters</button>
   <button id="exportBtn">Export CSV</button>
   <button id="exportChangesBtn">Export Changes Only</button>
+  <label for="updateCollectionBtn" style="cursor: pointer; color: blue; text-decoration: underline;" title="Use this to convert xls files created from Alma." >Update Collection</label>
+  <input style="display: none;" type="file" id="updateCollectionBtn" accept=".xlsx" ></input>
 </div>
     <div id="loading" style="display: none">Loading journals...</div>
     <div id="stats" style="margin: 10px 0; font-weight: bold;"></div>
@@ -59,6 +62,7 @@
     </table>
 
     <script>
+
       let allJournals = []; 
       const loading = document.getElementById("loading");
       const tbody = document.querySelector("#journalTable tbody");
@@ -67,11 +71,48 @@
       const toDate = document.getElementById("toDate");
       const statsDiv = document.getElementById("stats");
       const updatedOnlyCheckbox = document.getElementById("updatedOnly");
+      const updateCollectionBtn = document.getElementById("updateCollectionBtn");
 
       updatedOnlyCheckbox.addEventListener("change", applyFilters);
       document.getElementById("filterBtn").addEventListener("click", applyFilters);
       document.getElementById("exportBtn").addEventListener("click", () => downloadCSV("journals.csv", allJournals));
       document.getElementById("exportChangesBtn").addEventListener("click", () => downloadCSV("journals_changes.csv", allJournals.filter(j => j.changed)));
+
+      // Wire up file input for updating collection
+      updateCollectionBtn.addEventListener("change", handleUpdateCollection);
+
+      async function handleUpdateCollection(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  loading.style.display = "block";
+
+  try {
+    const res = await fetch('/upload-excel', {
+      method: 'POST',
+      body: formData
+    });
+    const result = await res.json();
+    if (res.ok) {
+      console.log('Excel uploaded and journals.json updated:', result);
+      alert(`Updated journals.json with ${result.count} records.`);
+      // Refresh the table
+      await updateJournals();
+    } else {
+      console.error('Upload error:', result);
+      alert('Upload failed: ' + (result.error || 'Unknown error'));
+    }
+  } catch (err) {
+    console.error('Error uploading Excel:', err);
+    alert('Error uploading Excel file');
+  } finally {
+    loading.style.display = "none";
+    event.target.value = ""; // reset file input
+  }
+}
 
         // Fetch all journals from server including oldTitle
       async function fetchJournals() {
