@@ -81,57 +81,45 @@
       // Wire up file input for updating collection
       updateCollectionBtn.addEventListener("change", handleUpdateCollection);
 
-// Original code snippet for context, assuming this is inside handleUpdateCollection or similar
-async function handleUpdateCollection(file) {
+async function handleUpdateCollection(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
   try {
     const formData = new FormData();
-    formData.append('excelFile', file);
+    formData.append('file', file); // make sure the key matches your server ("file")
 
-    const response = await fetch('/upload-excel', { // Replace with your actual API endpoint
+    const response = await fetch('/api/upload-excel', {
       method: 'POST',
-      body: formData,
-      headers: {
-        // Add any necessary headers, e.g., for authentication
-      }
+      body: formData
     });
 
-    if (!response.ok) { // Check if the response status is not in the 2xx range
-      let errorMessage = "An unknown error occurred during upload.";
+    // Read the body once
+    const responseText = await response.text();
+
+    if (!response.ok) {
+      // Try parsing JSON for error message
+      let errorMessage;
       try {
-        // Attempt to parse as JSON if the server *might* send JSON errors
-        const errorData = await response.json();
+        const errorData = JSON.parse(responseText);
         errorMessage = errorData.message || JSON.stringify(errorData);
       } catch (e) {
-        // If parsing as JSON fails, read as plain text
-        errorMessage = await response.text();
-        // If text is empty or generic, use a default message
-        if (!errorMessage || errorMessage.trim().length === 0) {
-          errorMessage = `Server responded with status ${response.status} ${response.statusText}.`;
-        }
+        errorMessage = responseText || `Server responded with status ${response.status}`;
       }
-      // Throw an error to be caught by the outer catch block
-      throw new Error(`Upload failed: ${errorMessage}`);
+      throw new Error(errorMessage);
     }
 
-    const result = await response.json(); // This is where your original error likely occurred
-    // Process successful result
+    // If successful, parse JSON
+    const result = JSON.parse(responseText);
     console.log("Excel uploaded successfully:", result);
-    alert("Excel file uploaded successfully!");
+    alert(`Excel file uploaded successfully! ${result.count} journals updated.`);
 
   } catch (err) {
-    // This is the error handler you provided
     console.error("Error uploading Excel:", err);
-    alert("Error uploading Excel file: " + err.message); // Display more specific error
+    alert("Error uploading Excel file: " + err.message);
   }
 }
 
-// Example usage:
-// const excelInput = document.getElementById('excelFileInput');
-// excelInput.addEventListener('change', (event) => {
-//   if (event.target.files.length > 0) {
-//     handleUpdateCollection(event.target.files[0]);
-//   }
-// });
         // Fetch all journals from server including oldTitle
       async function fetchJournals() {
         loading.style.display = "block";
