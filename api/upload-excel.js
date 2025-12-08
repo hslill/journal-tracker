@@ -26,7 +26,7 @@ apiRoute.post(async (req, res) => {
     if (!file) throw new Error("No file uploaded");
 
     // Read Excel
-    const workbook = XLSX.readFile(file.path);
+    const workbook = XLSX.read(file.buffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
     const data = XLSX.utils.sheet_to_json(sheet);
