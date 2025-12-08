@@ -1,14 +1,11 @@
 import { Octokit } from "@octokit/rest";
 import multer from "multer";
 import XLSX from "xlsx";
-import fs from "fs";
-import path from "path";
 import nextConnect from "next-connect";
 
-// Multer setup for temporary file storage
+// Multer in-memory storage
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Vercel serverless doesn't have express by default, so we use next-connect
 const apiRoute = nextConnect({
   onError(error, req, res) {
     res.status(500).json({ error: error.message });
@@ -25,13 +22,11 @@ apiRoute.post(async (req, res) => {
     const file = req.file;
     if (!file) throw new Error("No file uploaded");
 
-    // Read Excel
     const workbook = XLSX.read(file.buffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
     const data = XLSX.utils.sheet_to_json(sheet);
 
-    // Normalize ISSN
     function normalizeISSN(issn) {
       if (!issn) return null;
       return issn.replace(/[^0-9Xx]/g, "").toUpperCase();
@@ -45,25 +40,18 @@ apiRoute.post(async (req, res) => {
       }))
       .filter((j) => j.issn);
 
-    // Commit to GitHub
-    const octokit = new Octokit({
-      auth: process.env.GITHUB_TOKEN, // set in Vercel dashboard
-    });
-
+    const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
     const owner = "hslill";
     const repo = "journal-tracker";
     const pathInRepo = "alljournals/journals.json";
 
-    // Get current file SHA (required to update)
     const { data: currentFile } = await octokit.repos.getContent({
       owner,
       repo,
       path: pathInRepo,
     });
 
-    const base64Content = Buffer.from(JSON.stringify(journals, null, 2)).toString(
-      "base64"
-    );
+    const base64Content = Buffer.from(JSON.stringify(journals, null, 2)).toString("base64");
 
     await octokit.repos.createOrUpdateFileContents({
       owner,
@@ -76,15 +64,10 @@ apiRoute.post(async (req, res) => {
 
     res.status(200).json({ success: true, count: journals.length });
   } catch (err) {
+    console.error("Server error:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
 export default apiRoute;
-
-// Disable default bodyParser, multer handles it
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+export const config = { api: { bodyParser: false } };
