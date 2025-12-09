@@ -90,7 +90,7 @@ async function handleUpdateCollection(event) {
     formData.append('file', file);
 
     // Unified endpoint works for both local and serverless
-    const response = await fetch('/api/upload-excel', {
+    const response = await fetch('/node.js', {
       method: 'POST',
       body: formData
     });
