@@ -90,7 +90,7 @@ async function handleUpdateCollection(event) {
     formData.append('file', file);
 
     // Unified endpoint works for both local and serverless
-    const response = await fetch('/api/alljournals/alljournals.js', {
+    const response = await fetch('/api/alljournals.js', {
       method: 'POST',
       body: formData
     });
