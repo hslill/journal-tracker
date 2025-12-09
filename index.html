@@ -78,8 +78,9 @@
       document.getElementById("exportBtn").addEventListener("click", () => downloadCSV("journals.csv", allJournals));
       document.getElementById("exportChangesBtn").addEventListener("click", () => downloadCSV("journals_changes.csv", allJournals.filter(j => j.changed)));
 
-      // Wire up file input for updating collection
-      updateCollectionBtn.addEventListener("change", handleUpdateCollection);
+const updateCollectionBtn = document.getElementById("updateCollectionBtn");
+
+updateCollectionBtn.addEventListener("change", handleUpdateCollection);
 
 async function handleUpdateCollection(event) {
   const file = event.target.files[0];
@@ -89,45 +90,41 @@ async function handleUpdateCollection(event) {
     const formData = new FormData();
     formData.append('file', file);
 
-    // POST to your unified endpoint
+    // Send Excel to simplified upload API
     const response = await fetch('/api/upload-excel', {
       method: 'POST',
       body: formData
     });
 
-    // Always parse JSON safely
+    // Always read response text first to catch non-JSON errors
+    const text = await response.text();
+
     let result;
     try {
-      result = await response.json();
-    } catch (err) {
-      console.error("Failed to parse JSON:", err);
-      alert("Unexpected response from server. Check console for details.");
-      return;
+      result = JSON.parse(text);
+    } catch {
+      throw new Error(`Server response was not JSON: ${text}`);
     }
 
     if (!response.ok) {
-      // Server returned an error JSON
       throw new Error(result.error || `Server responded with status ${response.status}`);
     }
 
-    // Success! Show which source was used
-    const message = `Excel file uploaded successfully!\n
-Journals processed: ${result.count}${result.mergedCount ? `\nMerged with existing: ${result.mergedCount}` : ''}
-Source: ${result.source}`;
-    console.log(message);
-    alert(message);
-
-    // Optionally, refresh your table after upload
+    console.log("Excel uploaded successfully:", result);
+    alert(`Excel uploaded! ${result.count} journals updated${result.mergedCount ? ` (merged: ${result.mergedCount})` : ''}.`);
+    
+    // Optionally refresh table after upload
     await updateJournals();
 
   } catch (err) {
     console.error("Error uploading Excel:", err);
     alert("Error uploading Excel file: " + err.message);
   } finally {
-    // Clear file input for next upload
-    event.target.value = "";
+    // Reset input so user can re-upload same file if needed
+    updateCollectionBtn.value = '';
   }
 }
+
 
         // Fetch all journals from server including oldTitle
       async function fetchJournals() {
