@@ -1,30 +1,18 @@
 // upload-excel.js
-import { Octokit } from "@octokit/rest";
+import express from "express";
 import multer from "multer";
 import XLSX from "xlsx";
-import nextConnect from "next-connect";
 import fs from "fs";
 import path from "path";
+import { Octokit } from "@octokit/rest";
 
 // ===============================
+// Setup Express router
+// ===============================
+const router = express.Router();
+
 // Multer in-memory storage
-// ===============================
 const upload = multer({ storage: multer.memoryStorage() });
-
-// ===============================
-// Next.js API handler
-// ===============================
-const apiRoute = nextConnect({
-  onError(error, req, res) {
-    console.error("API error:", error);
-    res.status(500).json({ error: error.message });
-  },
-  onNoMatch(req, res) {
-    res.status(405).json({ error: `Method ${req.method} not allowed` });
-  },
-});
-
-apiRoute.use(upload.single("file"));
 
 // ===============================
 // Helper: normalize ISSN
@@ -43,15 +31,14 @@ const LOCAL_FILE = path.join(process.cwd(), "alljournals", "journals.json");
 // ===============================
 // POST handler: upload Excel
 // ===============================
-apiRoute.post(async (req, res) => {
+router.post("/upload-excel", upload.single("file"), async (req, res) => {
   try {
     const file = req.file;
-    if (!file) throw new Error("No file uploaded");
+    if (!file) return res.status(400).json({ error: "No file uploaded" });
 
     // Parse Excel
     const workbook = XLSX.read(file.buffer, { type: "buffer" });
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const data = XLSX.utils.sheet_to_json(sheet);
 
     // Normalize journals
@@ -121,5 +108,4 @@ apiRoute.post(async (req, res) => {
   }
 });
 
-export default apiRoute;
-export const config = { api: { bodyParser: false } };
+export default router;
