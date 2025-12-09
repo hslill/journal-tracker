@@ -1,8 +1,8 @@
 // upload-excel.js
 import { Octokit } from "@octokit/rest";
 import multer from "multer";
-import XLSX from "xlsx";
 import nextConnect from "next-connect";
+import XLSX from "xlsx";
 import fs from "fs";
 import path from "path";
 
@@ -31,7 +31,7 @@ apiRoute.use(upload.single("file"));
 // ===============================
 function normalizeISSN(issn) {
   if (!issn) return null;
-  return issn.replace(/[^0-9Xx]/g, "").toUpperCase();
+  return issn.toString().trim().replace(/[^0-9Xx]/g, "").toUpperCase();
 }
 
 // ===============================
@@ -56,34 +56,23 @@ apiRoute.post(async (req, res) => {
 
     // Normalize journals
     const journals = data
-      .filter((row) => row.Title && row.ISSN)
-      .map((row) => ({
-        title: row.Title.trim(),
-        issn: normalizeISSN(row.ISSN),
-      }))
-      .filter((j) => j.issn);
+      .filter(r => r.Title && r.ISSN)
+      .map(r => ({ title: r.Title.toString().trim(), issn: normalizeISSN(r.ISSN) }))
+      .filter(j => j.issn);
 
-    if (!journals.length) {
-      return res.status(400).json({ error: "No valid journals found in Excel." });
-    }
+    if (!journals.length) return res.status(400).json({ error: "No valid journals found." });
 
     if (isServerless) {
       // ===============================
       // Serverless: push to GitHub
       // ===============================
-      const githubToken = process.env.GITHUB_TOKEN;
-      if (!githubToken) {
-        return res.status(500).json({ error: "GitHub token not set in environment." });
-      }
-
-      const octokit = new Octokit({ auth: githubToken });
+      const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
       const owner = "hslill";
       const repo = "journal-tracker";
       const pathInRepo = "alljournals/journals.json";
 
       try {
         const { data: currentFile } = await octokit.repos.getContent({ owner, repo, path: pathInRepo });
-
         const base64Content = Buffer.from(JSON.stringify(journals, null, 2)).toString("base64");
 
         await octokit.repos.createOrUpdateFileContents({
@@ -102,24 +91,10 @@ apiRoute.post(async (req, res) => {
       }
     } else {
       // ===============================
-      // Local Node.js: write to journals.json
+      // Local Node.js: overwrite journals.json
       // ===============================
-      let existing = [];
-      try {
-        existing = JSON.parse(fs.readFileSync(LOCAL_FILE, "utf8"));
-      } catch (e) {
-        console.warn("No existing journals.json, starting fresh.");
-      }
-
-      // Merge by ISSN
-      const mergedMap = {};
-      existing.forEach((j) => { if (j.issn) mergedMap[j.issn] = j; });
-      journals.forEach((j) => { mergedMap[j.issn] = { ...mergedMap[j.issn], ...j }; });
-
-      const merged = Object.values(mergedMap);
-      fs.writeFileSync(LOCAL_FILE, JSON.stringify(merged, null, 2));
-
-      return res.status(200).json({ success: true, count: journals.length, mergedCount: merged.length, source: "local" });
+      fs.writeFileSync(LOCAL_FILE, JSON.stringify(journals, null, 2));
+      return res.status(200).json({ success: true, count: journals.length, source: "local" });
     }
   } catch (err) {
     console.error("Excel upload error:", err);
