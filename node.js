@@ -50,24 +50,48 @@ app.post("/api/upload-excel", upload.single("file"), (req, res) => {
       return res.status(400).json({ error: "No file uploaded." });
     }
 
+    console.log("Excel upload started. File size:", req.file.size);
+
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const data = XLSX.utils.sheet_to_json(sheet);
+    console.log("Parsed rows from Excel:", data.length);
 
-    const journals = data
+    // Extract journals from Excel
+    const excelJournals = data
       .filter(row => row.Title && row.ISSN)
       .map(row => ({
         title: row.Title.trim(),
         issn: normalizeISSN(row.ISSN)
       }))
       .filter(j => j.issn);
+    console.log("Filtered journals from Excel:", excelJournals.length);
 
-    fs.writeFileSync(JOURNALS_FILE, JSON.stringify(journals, null, 2));
+    // Read existing journals.json safely
+    let existingJournals = [];
+    try {
+      existingJournals = JSON.parse(fs.readFileSync(JOURNALS_FILE, "utf8"));
+      console.log("Existing journals loaded:", existingJournals.length);
+    } catch (e) {
+      console.warn("Could not read existing journals.json, starting fresh.");
+    }
+
+    // Merge Excel journals with existing ones (by ISSN)
+    const mergedJournalsMap = {};
+    existingJournals.forEach(j => { if (j.issn) mergedJournalsMap[j.issn] = j; });
+    excelJournals.forEach(j => { mergedJournalsMap[j.issn] = { ...mergedJournalsMap[j.issn], ...j }; });
+
+    const mergedJournals = Object.values(mergedJournalsMap);
+    console.log("Merged journals count:", mergedJournals.length);
+
+    // Write merged journals.json
+    fs.writeFileSync(JOURNALS_FILE, JSON.stringify(mergedJournals, null, 2));
 
     return res.json({
       success: true,
-      count: journals.length,
-      message: "Excel processed and journals.json updated."
+      count: excelJournals.length,
+      mergedCount: mergedJournals.length,
+      message: "Excel processed and journals.json merged successfully."
     });
 
   } catch (err) {
