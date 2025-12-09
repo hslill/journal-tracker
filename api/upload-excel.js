@@ -6,7 +6,7 @@ import XLSX from "xlsx";
 import fs from "fs";
 import path from "path";
 
-const CHUNK_SIZE = 500; // adjust if needed
+const CHUNK_SIZE = 50; // adjust if needed
 const upload = multer({ storage: multer.memoryStorage() });
 const LOCAL_FILE = path.join(process.cwd(), "alljournals", "journals.json");
 
