@@ -1,13 +1,14 @@
-// ===============================
-//  IMPORTS
-// ===============================
-const express = require('express');
-const multer = require('multer');
-const XLSX = require('xlsx');
-const fetch = require('node-fetch');
-const fs = require('fs');
-const path = require('path');
-const isServerless = !!process.env.VERCEL || !!process.env.NOW_REGION;
+// server.js
+import express from "express";
+import multer from "multer";
+import XLSX from "xlsx";
+import fetch from "node-fetch";
+import fs from "fs";
+import path from "path";
+import dotenv from "dotenv";
+
+dotenv.config(); // Load .env in local dev
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -15,26 +16,23 @@ const PORT = process.env.PORT || 3001;
 const upload = multer({ storage: multer.memoryStorage() });
 
 // ===============================
-//  CONSTANTS
+// Constants from .env
 // ===============================
-const API_KEY = '0a8115ed-3148-4291-8c79-54466fabdc3e';
-const LIBRARY_ID = 3820;
-const BATCH_SIZE = 5;
+const API_KEY = process.env.THIRDIOR_PUBLIC_API_KEY; // now loaded from env
+const LIBRARY_ID = parseInt(process.env.LIBRARY_ID || "3820", 10);
+const BATCH_SIZE = parseInt(process.env.BATCH_SIZE || "5", 10);
 
-// Journals file locations
-const JOURNALS_FILE = path.join(__dirname, 'alljournals', 'journals.json');
-const TEMP_FILE = path.join(__dirname, 'alljournals', 'journals.tmp.json');
+const JOURNALS_FILE = path.join(process.cwd(), "alljournals", "journals.json");
+const TEMP_FILE = path.join(process.cwd(), "alljournals", "journals.tmp.json");
 
-// ===============================
-//  INITIALIZE journals.json
-// ===============================
+// Ensure journals.json exists
 if (!fs.existsSync(JOURNALS_FILE)) {
-  console.log('journals.json missing, creating empty list.');
+  console.log("journals.json missing, creating empty list.");
   fs.writeFileSync(JOURNALS_FILE, JSON.stringify([], null, 2));
 }
 
 // ===============================
-//  HELPER: Normalize ISSN
+// Helper: normalize ISSN
 // ===============================
 function normalizeISSN(issn) {
   if (!issn) return null;
@@ -42,92 +40,68 @@ function normalizeISSN(issn) {
 }
 
 // ===============================
-//  API: Upload Excel + Rewrite journals.json
+// Upload Excel + merge journals.json
 // ===============================
 app.post("/api/upload-excel", upload.single("file"), (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: "No file uploaded." });
-    }
-
-    console.log("Excel upload started. File size:", req.file.size);
+    if (!req.file) return res.status(400).json({ error: "No file uploaded." });
 
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const data = XLSX.utils.sheet_to_json(sheet);
-    console.log("Parsed rows from Excel:", data.length);
 
-    // Extract journals from Excel
     const excelJournals = data
-      .filter(row => row.Title && row.ISSN)
-      .map(row => ({
-        title: row.Title.trim(),
-        issn: normalizeISSN(row.ISSN)
-      }))
-      .filter(j => j.issn);
-    console.log("Filtered journals from Excel:", excelJournals.length);
+      .filter((row) => row.Title && row.ISSN)
+      .map((row) => ({ title: row.Title.trim(), issn: normalizeISSN(row.ISSN) }))
+      .filter((j) => j.issn);
 
-    // Read existing journals.json safely
+    if (!excelJournals.length) {
+      return res.status(400).json({ error: "No valid journals found in Excel." });
+    }
+
+    // Merge with existing journals
     let existingJournals = [];
     try {
       existingJournals = JSON.parse(fs.readFileSync(JOURNALS_FILE, "utf8"));
-      console.log("Existing journals loaded:", existingJournals.length);
-    } catch (e) {
+    } catch (err) {
       console.warn("Could not read existing journals.json, starting fresh.");
     }
 
-    // Merge Excel journals with existing ones (by ISSN)
-    const mergedJournalsMap = {};
-    existingJournals.forEach(j => { if (j.issn) mergedJournalsMap[j.issn] = j; });
-    excelJournals.forEach(j => { mergedJournalsMap[j.issn] = { ...mergedJournalsMap[j.issn], ...j }; });
+    const mergedMap = {};
+    existingJournals.forEach((j) => { if (j.issn) mergedMap[j.issn] = j; });
+    excelJournals.forEach((j) => { mergedMap[j.issn] = { ...mergedMap[j.issn], ...j }; });
 
-    const mergedJournals = Object.values(mergedJournalsMap);
-    console.log("Merged journals count:", mergedJournals.length);
-
-    // Write merged journals.json
+    const mergedJournals = Object.values(mergedMap);
     fs.writeFileSync(JOURNALS_FILE, JSON.stringify(mergedJournals, null, 2));
 
-    return res.json({
-      success: true,
-      count: excelJournals.length,
-      mergedCount: mergedJournals.length,
-      message: "Excel processed and journals.json merged successfully."
-    });
-
+    res.json({ success: true, count: excelJournals.length, mergedCount: mergedJournals.length });
   } catch (err) {
     console.error("Excel upload error:", err);
-    return res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 
 // ===============================
-//  API: Return cached journals
+// Return cached journals
 // ===============================
-app.get('/alljournals', (req, res) => {
+app.get("/alljournals", (req, res) => {
   try {
-    const content = fs.readFileSync(JOURNALS_FILE, 'utf8');
+    const content = fs.readFileSync(JOURNALS_FILE, "utf8");
     const journals = JSON.parse(content);
-    console.log('Serving', journals.length, 'journals');
     res.json(journals);
   } catch (err) {
-    console.error('Error reading journals.json:', err);
-    res.status(500).json({ error: 'Unable to read cached journals' });
+    console.error("Error reading journals.json:", err);
+    res.status(500).json({ error: "Unable to read cached journals" });
   }
 });
 
 // ===============================
-//  STATIC FILES + ROOT
-// ===============================
-app.use(express.static(__dirname));
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
-
-// ===============================
-//  Fetch ISSNs in batches
+// Fetch ISSNs in batches
 // ===============================
 async function fetchBatchedISSNs(issns) {
   const results = [];
   for (let i = 0; i < issns.length; i += BATCH_SIZE) {
-    const batch = issns.slice(i, i + BATCH_SIZE).filter(Boolean).join(',');
+    const batch = issns.slice(i, i + BATCH_SIZE).filter(Boolean).join(",");
     if (!batch) continue;
 
     const url = `https://public-api.thirdiron.com/public/v1/libraries/${LIBRARY_ID}/search?issns=${batch}&access_token=${API_KEY}`;
@@ -139,9 +113,7 @@ async function fetchBatchedISSNs(issns) {
         continue;
       }
       const json = await response.json();
-      if (!Array.isArray(json.data)) continue;
-      results.push(...json.data);
-
+      if (Array.isArray(json.data)) results.push(...json.data);
     } catch (err) {
       console.error(`Batch fetch error [${batch}]:`, err.message);
     }
@@ -150,59 +122,58 @@ async function fetchBatchedISSNs(issns) {
 }
 
 // ===============================
-//  Fetch and Cache All Journals
+// Fetch all journals and update cache
 // ===============================
 async function fetchAllJournals() {
   try {
-    const masterList = JSON.parse(fs.readFileSync(JOURNALS_FILE, 'utf8'));
-    const issns = masterList.map(j => j.issn).filter(Boolean);
-
-    if (!issns.length) {
-      console.log('No ISSNs found in journals.json.');
-      return masterList;
-    }
+    const masterList = JSON.parse(fs.readFileSync(JOURNALS_FILE, "utf8"));
+    const issns = masterList.map((j) => j.issn).filter(Boolean);
+    if (!issns.length) return masterList;
 
     const fetched = await fetchBatchedISSNs(issns);
     if (!fetched.length) return masterList;
 
-    const merged = fetched.map(j => {
-      const old = masterList.find(m => m.issn === j.issn);
+    const merged = fetched.map((j) => {
+      const old = masterList.find((m) => m.issn === j.issn);
       return { ...j, oldTitle: old?.oldTitle || j.title };
     });
 
     fs.writeFileSync(TEMP_FILE, JSON.stringify(merged, null, 2));
     fs.renameSync(TEMP_FILE, JOURNALS_FILE);
-
-    console.log(`Successfully fetched ${merged.length} journals.`);
     return merged;
-
   } catch (err) {
-    console.error('fetchAllJournals error:', err);
+    console.error("fetchAllJournals error:", err);
     return [];
   }
 }
 
 // ===============================
-//  Single ISSN batch endpoint
+// Single ISSN batch endpoint
 // ===============================
-app.get('/bz', async (req, res) => {
+app.get("/bz", async (req, res) => {
   const issnsParam = req.query.issns;
-  if (!issnsParam) return res.status(400).json({ error: 'Missing issns parameter' });
+  if (!issnsParam) return res.status(400).json({ error: "Missing issns parameter" });
 
-  const issns = issnsParam.split(',').map(s => s.trim()).filter(Boolean);
-  if (!issns.length) return res.status(400).json({ error: 'No valid ISSNs provided' });
+  const issns = issnsParam.split(",").map((s) => s.trim()).filter(Boolean);
+  if (!issns.length) return res.status(400).json({ error: "No valid ISSNs provided" });
 
   try {
     const results = await fetchBatchedISSNs(issns);
     res.json(results);
   } catch (err) {
-    console.error('Error in /bz:', err.message);
+    console.error("Error in /bz:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 // ===============================
-//  Start server
+// Serve static files + root
+// ===============================
+app.use(express.static(process.cwd()));
+app.get("/", (req, res) => res.sendFile(path.join(process.cwd(), "index.html")));
+
+// ===============================
+// Start server
 // ===============================
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
