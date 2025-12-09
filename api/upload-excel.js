@@ -6,55 +6,29 @@ import XLSX from "xlsx";
 import fs from "fs";
 import path from "path";
 
-// ===============================
-// Multer in-memory storage
-// ===============================
 const upload = multer({ storage: multer.memoryStorage() });
-
-// ===============================
-// Next.js API handler
-// ===============================
-const apiRoute = nextConnect({
-  onError(error, req, res) {
-    console.error("API error:", error);
-    res.status(500).json({ error: error.message || "Server error" });
-  },
-  onNoMatch(req, res) {
-    res.status(405).json({ error: `Method ${req.method} not allowed` });
-  },
-});
+const apiRoute = nextConnect();
 
 apiRoute.use(upload.single("file"));
 
-// ===============================
-// Helper: normalize ISSN
-// ===============================
 function normalizeISSN(issn) {
   if (!issn) return null;
   return issn.toString().trim().replace(/[^0-9Xx]/g, "").toUpperCase();
 }
 
-// ===============================
-// Paths & environment
-// ===============================
 const LOCAL_FILE = path.join(process.cwd(), "alljournals", "journals.json");
 const isServerless = !!process.env.GITHUB_TOKEN;
+const CHUNK_SIZE = 500; // Number of journals per commit
 
-// ===============================
-// POST handler: upload Excel
-// ===============================
 apiRoute.post(async (req, res) => {
   try {
-    const file = req.file;
-    if (!file) return res.status(400).json({ error: "No file uploaded." });
+    if (!req.file) return res.status(400).json({ error: "No file uploaded." });
 
-    // Parse Excel
-    const workbook = XLSX.read(file.buffer, { type: "buffer" });
+    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
     const data = XLSX.utils.sheet_to_json(sheet);
 
-    // Normalize journals
     const journals = data
       .filter(r => r.Title && r.ISSN)
       .map(r => ({ title: r.Title.toString().trim(), issn: normalizeISSN(r.ISSN) }))
@@ -63,39 +37,47 @@ apiRoute.post(async (req, res) => {
     if (!journals.length) return res.status(400).json({ error: "No valid journals found." });
 
     if (isServerless) {
-      // ===============================
-      // Serverless: push to GitHub
-      // ===============================
       const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
       const owner = "hslill";
       const repo = "journal-tracker";
       const pathInRepo = "alljournals/journals.json";
 
-      try {
-        const { data: currentFile } = await octokit.repos.getContent({ owner, repo, path: pathInRepo });
-        const base64Content = Buffer.from(JSON.stringify(journals, null, 2)).toString("base64");
+      // Step 1: Get current file SHA
+      const { data: currentFile } = await octokit.repos.getContent({ owner, repo, path: pathInRepo });
+      const currentSHA = currentFile.sha;
+
+      // Step 2: Split journals into chunks
+      const chunks = [];
+      for (let i = 0; i < journals.length; i += CHUNK_SIZE) {
+        chunks.push(journals.slice(i, i + CHUNK_SIZE));
+      }
+
+      // Step 3: Sequentially commit each chunk
+      let lastSHA = currentSHA;
+      for (let i = 0; i < chunks.length; i++) {
+        const base64Content = Buffer.from(JSON.stringify(chunks[i], null, 2)).toString("base64");
 
         await octokit.repos.createOrUpdateFileContents({
           owner,
           repo,
           path: pathInRepo,
-          message: `Update journals.json via web upload (${new Date().toISOString()})`,
+          message: `Update journals.json chunk ${i + 1}/${chunks.length} (${new Date().toISOString()})`,
           content: base64Content,
-          sha: currentFile.sha,
+          sha: lastSHA,
         });
 
-        return res.status(200).json({ success: true, count: journals.length, source: "GitHub" });
-      } catch (err) {
-        console.error("GitHub upload error:", err);
-        return res.status(500).json({ error: "Failed to update journals.json on GitHub: " + err.message });
+        // Update SHA for next commit
+        const { data: updatedFile } = await octokit.repos.getContent({ owner, repo, path: pathInRepo });
+        lastSHA = updatedFile.sha;
       }
+
+      return res.status(200).json({ success: true, count: journals.length, chunks: chunks.length, source: "GitHub" });
     } else {
-      // ===============================
-      // Local Node.js: overwrite journals.json
-      // ===============================
+      // Local overwrite
       fs.writeFileSync(LOCAL_FILE, JSON.stringify(journals, null, 2));
       return res.status(200).json({ success: true, count: journals.length, source: "local" });
     }
+
   } catch (err) {
     console.error("Excel upload error:", err);
     return res.status(500).json({ error: err.message || "Unknown server error" });
