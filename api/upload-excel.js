@@ -1,3 +1,4 @@
+// upload-excel.js
 import { Octokit } from "@octokit/rest";
 import multer from "multer";
 import XLSX from "xlsx";
@@ -5,9 +6,14 @@ import nextConnect from "next-connect";
 import fs from "fs";
 import path from "path";
 
+// ===============================
 // Multer in-memory storage
+// ===============================
 const upload = multer({ storage: multer.memoryStorage() });
 
+// ===============================
+// Next.js API handler
+// ===============================
 const apiRoute = nextConnect({
   onError(error, req, res) {
     console.error("API error:", error);
@@ -20,28 +26,35 @@ const apiRoute = nextConnect({
 
 apiRoute.use(upload.single("file"));
 
+// ===============================
 // Helper: normalize ISSN
+// ===============================
 function normalizeISSN(issn) {
   if (!issn) return null;
   return issn.replace(/[^0-9Xx]/g, "").toUpperCase();
 }
 
-// Detect local vs serverless
-const isLocal = typeof process.env.GITHUB_TOKEN === "undefined";
-
-// Path for local journals.json
+// ===============================
+// Detect environment
+// ===============================
+const isServerless = !!process.env.GITHUB_TOKEN;
 const LOCAL_FILE = path.join(process.cwd(), "alljournals", "journals.json");
 
+// ===============================
+// POST handler: upload Excel
+// ===============================
 apiRoute.post(async (req, res) => {
   try {
     const file = req.file;
     if (!file) throw new Error("No file uploaded");
 
+    // Parse Excel
     const workbook = XLSX.read(file.buffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
     const data = XLSX.utils.sheet_to_json(sheet);
 
+    // Normalize journals
     const journals = data
       .filter((row) => row.Title && row.ISSN)
       .map((row) => ({
@@ -50,30 +63,14 @@ apiRoute.post(async (req, res) => {
       }))
       .filter((j) => j.issn);
 
-    if (isLocal) {
-      // ==========================
-      // LOCAL: write to journals.json
-      // ==========================
-      let existing = [];
-      try {
-        existing = JSON.parse(fs.readFileSync(LOCAL_FILE, "utf8"));
-      } catch (e) {
-        console.warn("No existing journals.json, starting fresh.");
-      }
+    if (!journals.length) {
+      return res.status(400).json({ error: "No valid journals found in Excel file." });
+    }
 
-      // Merge by ISSN
-      const mergedMap = {};
-      existing.forEach((j) => { if (j.issn) mergedMap[j.issn] = j; });
-      journals.forEach((j) => { mergedMap[j.issn] = { ...mergedMap[j.issn], ...j }; });
-
-      const merged = Object.values(mergedMap);
-      fs.writeFileSync(LOCAL_FILE, JSON.stringify(merged, null, 2));
-
-      res.status(200).json({ success: true, count: journals.length, mergedCount: merged.length });
-    } else {
-      // ==========================
-      // SERVERLESS: push to GitHub
-      // ==========================
+    if (isServerless) {
+      // ===============================
+      // Serverless: push to GitHub
+      // ===============================
       const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
       const owner = "hslill";
       const repo = "journal-tracker";
@@ -96,7 +93,27 @@ apiRoute.post(async (req, res) => {
         sha: currentFile.sha,
       });
 
-      res.status(200).json({ success: true, count: journals.length });
+      return res.status(200).json({ success: true, count: journals.length, source: "GitHub" });
+    } else {
+      // ===============================
+      // Local Node.js: write to journals.json
+      // ===============================
+      let existing = [];
+      try {
+        existing = JSON.parse(fs.readFileSync(LOCAL_FILE, "utf8"));
+      } catch (e) {
+        console.warn("No existing journals.json, starting fresh.");
+      }
+
+      // Merge by ISSN
+      const mergedMap = {};
+      existing.forEach((j) => { if (j.issn) mergedMap[j.issn] = j; });
+      journals.forEach((j) => { mergedMap[j.issn] = { ...mergedMap[j.issn], ...j }; });
+
+      const merged = Object.values(mergedMap);
+      fs.writeFileSync(LOCAL_FILE, JSON.stringify(merged, null, 2));
+
+      return res.status(200).json({ success: true, count: journals.length, mergedCount: merged.length, source: "local" });
     }
   } catch (err) {
     console.error("Excel upload error:", err);
