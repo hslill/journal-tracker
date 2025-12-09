@@ -89,10 +89,10 @@ async function handleUpdateCollection(event) {
     const formData = new FormData();
     formData.append('file', file); // make sure the key matches your server ("file")
 
-    const response = await fetch('/api/upload-excel', {
-      method: 'POST',
-      body: formData
-    });
+    const response = await fetch('/api/upload-to-excel', {
+  method: 'POST',
+  body: formData
+});
 
     // Read the body once
     const responseText = await response.text();
