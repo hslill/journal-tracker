@@ -15,6 +15,14 @@ const apiRoute = nextConnect({
   }
 });
 
+const BATCH_SIZE = 500;
+for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+  const batchRows = rows.slice(i, i + BATCH_SIZE);
+  const batch = db.batch();
+  // add batchRows to batch
+  await batch.commit();
+}
+
 apiRoute.use(upload.single("file"));
 
 function normalizeISSN(issn) {
