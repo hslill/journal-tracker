@@ -17,7 +17,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 const apiRoute = nextConnect({
   onError(error, req, res) {
     console.error("API error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message || "Server error" });
   },
   onNoMatch(req, res) {
     res.status(405).json({ error: `Method ${req.method} not allowed` });
@@ -35,16 +35,10 @@ function normalizeISSN(issn) {
 }
 
 // ===============================
-// Detect environment
+// Paths & environment
 // ===============================
-const isServerless = !!process.env.GITHUB_TOKEN;
 const LOCAL_FILE = path.join(process.cwd(), "alljournals", "journals.json");
-
-// ===============================
-// Optional: BrowZine API keys (from alljournals.js)
-// ===============================
-const LIBRARY_ID = process.env.BROWZINE_LIBRARY_ID || 3820;
-const API_KEY = process.env.BROWZINE_API_KEY;
+const isServerless = !!process.env.GITHUB_TOKEN;
 
 // ===============================
 // POST handler: upload Excel
@@ -52,7 +46,7 @@ const API_KEY = process.env.BROWZINE_API_KEY;
 apiRoute.post(async (req, res) => {
   try {
     const file = req.file;
-    if (!file) throw new Error("No file uploaded");
+    if (!file) return res.status(400).json({ error: "No file uploaded." });
 
     // Parse Excel
     const workbook = XLSX.read(file.buffer, { type: "buffer" });
@@ -70,31 +64,25 @@ apiRoute.post(async (req, res) => {
       .filter((j) => j.issn);
 
     if (!journals.length) {
-      return res.status(400).json({ error: "No valid journals found in Excel file." });
+      return res.status(400).json({ error: "No valid journals found in Excel." });
     }
 
     if (isServerless) {
       // ===============================
       // Serverless: push to GitHub
       // ===============================
-      try {
-        const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
-        const owner = "hslill";
-        const repo = "journal-tracker";
-        const pathInRepo = "alljournals/journals.json";
+      const githubToken = process.env.GITHUB_TOKEN;
+      if (!githubToken) {
+        return res.status(500).json({ error: "GitHub token not set in environment." });
+      }
 
-        // Get the current file SHA
-        let sha = null;
-        try {
-          const { data: currentFile } = await octokit.repos.getContent({
-            owner,
-            repo,
-            path: pathInRepo,
-          });
-          sha = currentFile.sha;
-        } catch (err) {
-          console.warn("GitHub file does not exist, creating new file.");
-        }
+      const octokit = new Octokit({ auth: githubToken });
+      const owner = "hslill";
+      const repo = "journal-tracker";
+      const pathInRepo = "alljournals/journals.json";
+
+      try {
+        const { data: currentFile } = await octokit.repos.getContent({ owner, repo, path: pathInRepo });
 
         const base64Content = Buffer.from(JSON.stringify(journals, null, 2)).toString("base64");
 
@@ -104,13 +92,13 @@ apiRoute.post(async (req, res) => {
           path: pathInRepo,
           message: `Update journals.json via web upload (${new Date().toISOString()})`,
           content: base64Content,
-          sha,
+          sha: currentFile.sha,
         });
 
         return res.status(200).json({ success: true, count: journals.length, source: "GitHub" });
       } catch (err) {
-        console.error("GitHub push failed:", err);
-        return res.status(500).json({ error: "GitHub push failed: " + err.message });
+        console.error("GitHub upload error:", err);
+        return res.status(500).json({ error: "Failed to update journals.json on GitHub: " + err.message });
       }
     } else {
       // ===============================
@@ -135,7 +123,7 @@ apiRoute.post(async (req, res) => {
     }
   } catch (err) {
     console.error("Excel upload error:", err);
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message || "Unknown server error" });
   }
 });
 
