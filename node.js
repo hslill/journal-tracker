@@ -7,7 +7,7 @@ const XLSX = require('xlsx');
 const fetch = require('node-fetch');
 const fs = require('fs');
 const path = require('path');
-
+const isServerless = !!process.env.VERCEL || !!process.env.NOW_REGION;
 const app = express();
 const PORT = process.env.PORT || 3001;
 
