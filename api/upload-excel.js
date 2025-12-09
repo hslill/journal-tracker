@@ -15,14 +15,6 @@ const apiRoute = nextConnect({
   }
 });
 
-const BATCH_SIZE = 500;
-for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-  const batchRows = rows.slice(i, i + BATCH_SIZE);
-  const batch = db.batch();
-  // add batchRows to batch
-  await batch.commit();
-}
-
 apiRoute.use(upload.single("file"));
 
 function normalizeISSN(issn) {
@@ -38,27 +30,33 @@ apiRoute.post(async (req, res) => {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sheet);
 
-    // Process each row and push to Firestore
-    const batch = db.batch();
+    if (!rows.length) return res.status(400).json({ error: "No rows found in Excel." });
+
     const collectionRef = db.collection("journals");
+    const BATCH_SIZE = 500;
 
-    rows.forEach((row) => {
-      if (!row.ISSN || !row.Title) return;
-      const docRef = collectionRef.doc(normalizeISSN(row.ISSN));
-      batch.set(docRef, {
-        title: row.Title.trim(),
-        issn: normalizeISSN(row.ISSN),
-        id: row.id || null,
-        type: row.type || "journals",
-        sjrValue: row.sjrValue || 0,
-        coverImageUrl: row.coverImageUrl || "",
-        browzineEnabled: row.browzineEnabled || false,
-        browzineWebLink: row.browzineWebLink || "",
-        relationships: row.relationships || {}
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      const batchRows = rows.slice(i, i + BATCH_SIZE);
+      const batch = db.batch();
+
+      batchRows.forEach((row) => {
+        if (!row.ISSN || !row.Title) return;
+        const docRef = collectionRef.doc(normalizeISSN(row.ISSN));
+        batch.set(docRef, {
+          title: row.Title.trim(),
+          issn: normalizeISSN(row.ISSN),
+          id: row.id || null,
+          type: row.type || "journals",
+          sjrValue: row.sjrValue || 0,
+          coverImageUrl: row.coverImageUrl || "",
+          browzineEnabled: row.browzineEnabled || false,
+          browzineWebLink: row.browzineWebLink || "",
+          relationships: row.relationships || {}
+        });
       });
-    });
 
-    await batch.commit();
+      await batch.commit();
+    }
 
     res.status(200).json({ success: true, count: rows.length, source: "Firestore" });
   } catch (err) {
