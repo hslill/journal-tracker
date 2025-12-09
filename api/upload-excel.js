@@ -41,6 +41,12 @@ const isServerless = !!process.env.GITHUB_TOKEN;
 const LOCAL_FILE = path.join(process.cwd(), "alljournals", "journals.json");
 
 // ===============================
+// Optional: BrowZine API keys (from alljournals.js)
+// ===============================
+const LIBRARY_ID = process.env.BROWZINE_LIBRARY_ID || 3820;
+const API_KEY = process.env.BROWZINE_API_KEY;
+
+// ===============================
 // POST handler: upload Excel
 // ===============================
 apiRoute.post(async (req, res) => {
@@ -71,29 +77,41 @@ apiRoute.post(async (req, res) => {
       // ===============================
       // Serverless: push to GitHub
       // ===============================
-      const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
-      const owner = "hslill";
-      const repo = "journal-tracker";
-      const pathInRepo = "alljournals/journals.json";
+      try {
+        const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+        const owner = "hslill";
+        const repo = "journal-tracker";
+        const pathInRepo = "alljournals/journals.json";
 
-      const { data: currentFile } = await octokit.repos.getContent({
-        owner,
-        repo,
-        path: pathInRepo,
-      });
+        // Get the current file SHA
+        let sha = null;
+        try {
+          const { data: currentFile } = await octokit.repos.getContent({
+            owner,
+            repo,
+            path: pathInRepo,
+          });
+          sha = currentFile.sha;
+        } catch (err) {
+          console.warn("GitHub file does not exist, creating new file.");
+        }
 
-      const base64Content = Buffer.from(JSON.stringify(journals, null, 2)).toString("base64");
+        const base64Content = Buffer.from(JSON.stringify(journals, null, 2)).toString("base64");
 
-      await octokit.repos.createOrUpdateFileContents({
-        owner,
-        repo,
-        path: pathInRepo,
-        message: `Update journals.json via web upload (${new Date().toISOString()})`,
-        content: base64Content,
-        sha: currentFile.sha,
-      });
+        await octokit.repos.createOrUpdateFileContents({
+          owner,
+          repo,
+          path: pathInRepo,
+          message: `Update journals.json via web upload (${new Date().toISOString()})`,
+          content: base64Content,
+          sha,
+        });
 
-      return res.status(200).json({ success: true, count: journals.length, source: "GitHub" });
+        return res.status(200).json({ success: true, count: journals.length, source: "GitHub" });
+      } catch (err) {
+        console.error("GitHub push failed:", err);
+        return res.status(500).json({ error: "GitHub push failed: " + err.message });
+      }
     } else {
       // ===============================
       // Local Node.js: write to journals.json
