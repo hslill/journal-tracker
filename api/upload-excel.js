@@ -6,8 +6,19 @@ import XLSX from "xlsx";
 import fs from "fs";
 import path from "path";
 
+const CHUNK_SIZE = 500; // adjust if needed
 const upload = multer({ storage: multer.memoryStorage() });
-const apiRoute = nextConnect();
+const LOCAL_FILE = path.join(process.cwd(), "alljournals", "journals.json");
+
+const apiRoute = nextConnect({
+  onError(error, req, res) {
+    console.error("API error:", error);
+    res.status(500).json({ error: error.message || "Server error" });
+  },
+  onNoMatch(req, res) {
+    res.status(405).json({ error: `Method ${req.method} not allowed` });
+  },
+});
 
 apiRoute.use(upload.single("file"));
 
@@ -16,25 +27,39 @@ function normalizeISSN(issn) {
   return issn.toString().trim().replace(/[^0-9Xx]/g, "").toUpperCase();
 }
 
-const LOCAL_FILE = path.join(process.cwd(), "alljournals", "journals.json");
-const isServerless = !!process.env.GITHUB_TOKEN;
-const CHUNK_SIZE = 500; // Number of journals per commit
+// Helper: push a chunk to GitHub
+async function pushChunkToGitHub(journalsChunk, octokit, owner, repo, pathInRepo, prevSha) {
+  const base64Content = Buffer.from(JSON.stringify(journalsChunk, null, 2)).toString("base64");
+  const commitMessage = `Update journals.json chunk (${new Date().toISOString()})`;
+  const options = {
+    owner,
+    repo,
+    path: pathInRepo,
+    message: commitMessage,
+    content: base64Content,
+  };
+  if (prevSha) options.sha = prevSha;
 
+  const result = await octokit.repos.createOrUpdateFileContents(options);
+  return result.data.content.sha;
+}
+
+// ===============================
+// POST handler: upload Excel
+// ===============================
 apiRoute.post(async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: "No file uploaded." });
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "No file uploaded." });
 
-    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const data = XLSX.utils.sheet_to_json(sheet);
+    const workbook = XLSX.read(file.buffer, { type: "buffer" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const totalRows = XLSX.utils.sheet_to_json(sheet, { header: 1 }).length - 1; // minus header row
 
-    const journals = data
-      .filter(r => r.Title && r.ISSN)
-      .map(r => ({ title: r.Title.toString().trim(), issn: normalizeISSN(r.ISSN) }))
-      .filter(j => j.issn);
+    const isServerless = !!process.env.GITHUB_TOKEN;
 
-    if (!journals.length) return res.status(400).json({ error: "No valid journals found." });
+    let allJournals = []; // for local storage
+    let prevSha = null;
 
     if (isServerless) {
       const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
@@ -42,42 +67,38 @@ apiRoute.post(async (req, res) => {
       const repo = "journal-tracker";
       const pathInRepo = "alljournals/journals.json";
 
-      // Step 1: Get current file SHA
+      // Get current SHA for the first commit
       const { data: currentFile } = await octokit.repos.getContent({ owner, repo, path: pathInRepo });
-      const currentSHA = currentFile.sha;
+      prevSha = currentFile.sha;
 
-      // Step 2: Split journals into chunks
-      const chunks = [];
-      for (let i = 0; i < journals.length; i += CHUNK_SIZE) {
-        chunks.push(journals.slice(i, i + CHUNK_SIZE));
+      // Process in chunks
+      for (let start = 0; start < totalRows; start += CHUNK_SIZE) {
+        const end = Math.min(start + CHUNK_SIZE, totalRows);
+        const chunkRows = XLSX.utils.sheet_to_json(sheet, { range: `${start + 1}:${end}` }); // skip header row
+
+        const journalsChunk = chunkRows
+          .filter(r => r.Title && r.ISSN)
+          .map(r => ({ title: r.Title.toString().trim(), issn: normalizeISSN(r.ISSN) }))
+          .filter(j => j.issn);
+
+        if (!journalsChunk.length) continue;
+
+        // Commit this chunk
+        prevSha = await pushChunkToGitHub(journalsChunk, octokit, owner, repo, pathInRepo, prevSha);
       }
 
-      // Step 3: Sequentially commit each chunk
-      let lastSHA = currentSHA;
-      for (let i = 0; i < chunks.length; i++) {
-        const base64Content = Buffer.from(JSON.stringify(chunks[i], null, 2)).toString("base64");
-
-        await octokit.repos.createOrUpdateFileContents({
-          owner,
-          repo,
-          path: pathInRepo,
-          message: `Update journals.json chunk ${i + 1}/${chunks.length} (${new Date().toISOString()})`,
-          content: base64Content,
-          sha: lastSHA,
-        });
-
-        // Update SHA for next commit
-        const { data: updatedFile } = await octokit.repos.getContent({ owner, repo, path: pathInRepo });
-        lastSHA = updatedFile.sha;
-      }
-
-      return res.status(200).json({ success: true, count: journals.length, chunks: chunks.length, source: "GitHub" });
+      return res.status(200).json({ success: true, count: totalRows, source: "GitHub" });
     } else {
-      // Local overwrite
-      fs.writeFileSync(LOCAL_FILE, JSON.stringify(journals, null, 2));
-      return res.status(200).json({ success: true, count: journals.length, source: "local" });
-    }
+      // Local Node.js: read all, merge, and overwrite
+      const data = XLSX.utils.sheet_to_json(sheet);
+      allJournals = data
+        .filter(r => r.Title && r.ISSN)
+        .map(r => ({ title: r.Title.toString().trim(), issn: normalizeISSN(r.ISSN) }))
+        .filter(j => j.issn);
 
+      fs.writeFileSync(LOCAL_FILE, JSON.stringify(allJournals, null, 2));
+      return res.status(200).json({ success: true, count: allJournals.length, source: "local" });
+    }
   } catch (err) {
     console.error("Excel upload error:", err);
     return res.status(500).json({ error: err.message || "Unknown server error" });
