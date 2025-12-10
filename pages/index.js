@@ -8,10 +8,11 @@ export default function Home() {
   const [toDate, setToDate] = useState("");
   const [updatedOnly, setUpdatedOnly] = useState(false);
 
+// pages/index.js
 async function fetchJournals() {
   setLoading(true);
   try {
-    // Just use a relative path
+    // ✅ relative path, works in dev and production
     const res = await fetch("/api/alljournals");
 
     if (!res.ok) throw new Error(`Server returned ${res.status}`);
@@ -28,12 +29,13 @@ async function fetchJournals() {
 
     setAllJournals(mapped);
   } catch (err) {
+    console.error("Error fetching journals:", err);
     alert("Error fetching journals: " + err.message);
-    console.error(err);
   } finally {
     setLoading(false);
   }
 }
+
   useEffect(() => {
     fetchJournals();
   }, []);
