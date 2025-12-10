@@ -8,27 +8,29 @@ export default function Home() {
   const [toDate, setToDate] = useState("");
   const [updatedOnly, setUpdatedOnly] = useState(false);
 
-  async function fetchJournals() {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/alljournals");
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
-      const data = await res.json();
-      const mapped = data.map(j => ({
-        issn: j.issn,
-        title: j.title,
-        previousTitle: j.oldTitle || null,
-        changed: j.oldTitle && j.oldTitle !== j.title,
-        dateChecked: new Date().toISOString().split("T")[0],
-      }));
-      setAllJournals(mapped);
-    } catch (err) {
-      alert("Error fetching journals: " + err.message);
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+async function fetchJournals() {
+  setLoading(true);
+  try {
+    const base = typeof window !== "undefined" ? window.location.origin : "";
+    const res = await fetch(`${base}/api/alljournals`);
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    const data = await res.json();
+    const mapped = data.map(j => ({
+      issn: j.issn,
+      title: j.title,
+      previousTitle: j.oldTitle || null,
+      changed: j.oldTitle && j.oldTitle !== j.title,
+      dateChecked: new Date().toISOString().split("T")[0],
+    }));
+    setAllJournals(mapped);
+  } catch (err) {
+    alert("Error fetching journals: " + err.message);
+    console.error(err);
+  } finally {
+    setLoading(false);
   }
+}
+
 
   useEffect(() => {
     fetchJournals();
