@@ -89,7 +89,7 @@ async function handleUpdateCollection(event) {
     formData.append('file', file);
 
     // Send Excel to simplified upload API
-    const response = await fetch('/api/alljournals', {
+    const response = await fetch('/api/upload-firestore', {
       method: 'POST',
       body: formData
     });
