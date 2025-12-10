@@ -11,8 +11,7 @@ export default function Home() {
 async function fetchJournals() {
   setLoading(true);
   try {
-    const base = typeof window !== "undefined" ? window.location.origin : "";
-    const res = await fetch(`${base}/api/alljournals`);
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/alljournals`);
     if (!res.ok) throw new Error(`Server returned ${res.status}`);
     const data = await res.json();
     const mapped = data.map(j => ({
@@ -30,7 +29,6 @@ async function fetchJournals() {
     setLoading(false);
   }
 }
-
 
   useEffect(() => {
     fetchJournals();
