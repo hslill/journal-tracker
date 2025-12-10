@@ -1,14 +1,15 @@
+// pages/api/alljournals.js
 import { db } from "../../lib/firebaseAdmin";
 
 export default async function handler(req, res) {
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
   try {
     const snapshot = await db.collection("journals").get();
     const journals = [];
-
-    snapshot.forEach(doc => {
-      journals.push(doc.data());
-    });
-
+    snapshot.forEach(doc => journals.push(doc.data()));
     res.status(200).json(journals);
   } catch (err) {
     console.error("Firestore read error:", err);
