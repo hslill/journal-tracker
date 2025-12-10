@@ -137,7 +137,8 @@ async function handleUpdateCollection(event) {
 async function fetchJournals() {
   loading.style.display = "block";
   try {
-    const res = await fetch("/api/alljournals");
+    const API_BASE = "https://journal-tracker-git-main-desimd01s-projects.vercel.app";
+const res = await fetch(`${API_BASE}/api/alljournals`);
     if (!res.ok) throw new Error(`Server returned ${res.status}`);
 
     const data = await res.json();
