@@ -11,9 +11,13 @@ export default function Home() {
 async function fetchJournals() {
   setLoading(true);
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/alljournals`);
+    // Just use a relative path
+    const res = await fetch("/api/alljournals");
+
     if (!res.ok) throw new Error(`Server returned ${res.status}`);
+
     const data = await res.json();
+
     const mapped = data.map(j => ({
       issn: j.issn,
       title: j.title,
@@ -21,6 +25,7 @@ async function fetchJournals() {
       changed: j.oldTitle && j.oldTitle !== j.title,
       dateChecked: new Date().toISOString().split("T")[0],
     }));
+
     setAllJournals(mapped);
   } catch (err) {
     alert("Error fetching journals: " + err.message);
@@ -29,7 +34,6 @@ async function fetchJournals() {
     setLoading(false);
   }
 }
-
   useEffect(() => {
     fetchJournals();
   }, []);
