@@ -78,8 +78,6 @@
       document.getElementById("exportBtn").addEventListener("click", () => downloadCSV("journals.csv", allJournals));
       document.getElementById("exportChangesBtn").addEventListener("click", () => downloadCSV("journals_changes.csv", allJournals.filter(j => j.changed)));
 
-const loading = document.getElementById("loading");
-
 updateCollectionBtn.addEventListener("change", handleUpdateCollection);
 
 async function handleUpdateCollection(event) {
