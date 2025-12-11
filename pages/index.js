@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import styles from "../styles/Home.module.css";
 
 export default function Home() {
   const [allJournals, setAllJournals] = useState([]);
@@ -7,7 +8,7 @@ export default function Home() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [updatedOnly, setUpdatedOnly] = useState(false);
-
+  
 // pages/index.js
 async function fetchJournals() {
   setLoading(true);
@@ -88,48 +89,68 @@ async function fetchJournals() {
   const filtered = applyFilters();
 
   return (
-    <div style={{ padding: 20, fontFamily: "Segoe UI, Tahoma, Geneva, Verdana, sans-serif" }}>
-      <h1>Journal Title Tracker</h1>
-      <p>Track changes in the journal titles over time.</p>
-      <button onClick={fetchJournals}>Update</button>
-      <div style={{ margin: "15px 0" }}>
-        <input placeholder="Search ISSN or Title" value={search} onChange={e => setSearch(e.target.value)} />
-        <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} />
-        <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} />
-        <label>
-          Updated only
-          <input type="checkbox" checked={updatedOnly} onChange={e => setUpdatedOnly(e.target.checked)} />
-        </label>
-        <button onClick={() => downloadCSV("all_journals.csv", filtered)}>Export CSV</button>
-        <button onClick={() => downloadCSV("changes_only.csv", filtered.filter(j => j.changed))}>Export Changes Only</button>
-        <label style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}>
-          Update Collection
-          <input type="file" style={{ display: "none" }} onChange={handleUpload} />
-        </label>
-      </div>
+  <div className={styles.container}>
+    <h1>Journal Title Tracker</h1>
+    <p>Track changes in the journal titles over time.</p>
 
-      {loading && <div>Loading journals...</div>}
+    <button onClick={fetchJournals}>Update</button>
 
-      <table style={{ borderCollapse: "collapse", width: "100%" }}>
-        <thead>
-          <tr>
-            <th>ISSN</th>
-            <th>Title</th>
-            <th>Previous Title</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filtered.map(j => (
-            <tr key={j.issn} style={{ backgroundColor: j.changed ? "#ffeb3b" : "transparent" }}>
-              <td>{j.issn}</td>
-              <td>{j.title}</td>
-              <td>{j.previousTitle || "-"}</td>
-              <td>{j.changed ? "Updated" : "Unchanged"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className={styles.controls}>
+      <input
+        placeholder="Search ISSN or Title"
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+      />
+
+      <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} />
+      <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} />
+
+      <label>
+        Updated only
+        <input
+          type="checkbox"
+          checked={updatedOnly}
+          onChange={e => setUpdatedOnly(e.target.checked)}
+        />
+      </label>
+
+      <button onClick={() => downloadCSV("all_journals.csv", filtered)}>Export CSV</button>
+      <button onClick={() => downloadCSV("changes_only.csv", filtered.filter(j => j.changed))}>
+        Export Changes Only
+      </button>
+
+      <label className={styles.fileUploadLabel}>
+        Update Collection
+        <input type="file" style={{ display: "none" }} onChange={handleUpload} />
+      </label>
     </div>
-  );
+
+    {loading && <div>Loading journals...</div>}
+
+    <table className={styles.table}>
+      <thead>
+        <tr>
+          <th>ISSN</th>
+          <th>Title</th>
+          <th>Previous Title</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {filtered.map(j => (
+          <tr
+            key={j.issn}
+            className={j.changed ? styles.changedRow : ""}
+          >
+            <td>{j.issn}</td>
+            <td>{j.title}</td>
+            <td>{j.previousTitle || "-"}</td>
+            <td>{j.changed ? "Updated" : "Unchanged"}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
 }
