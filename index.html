@@ -393,25 +393,34 @@
       const resetBtn = document.getElementById("resetBtn");
 
       // --- Fetch journals ---
-      async function fetchJournals() {
-  try {
-    const res = await fetch("alljournals/journals.json"); // <-- direct path
-    const data = await res.json();
-    allJournals = data.map(j => ({
-      issn: j.issn,
-      title: j.title,
-      previousTitle: j.oldTitle || null,
-      changed: j.oldTitle && j.oldTitle !== j.title,
-      dateChecked: new Date().toISOString().split("T")[0]
-    }));
-    filteredJournals = allJournals.slice();
-    renderOffset = 0;
-    renderTable(filteredJournals);
-  } catch (err) {
-    console.error("Error fetching journals:", err);
-    allJournals = [];
-  }
-}
+         async function fetchJournals() {
+      try {
+        const response = await fetch('/api/journals'); // Replace with your actual endpoint
+        
+        // Check if the response was successful (e.g., 200 OK)
+        if (!response.ok) {
+          // Log or throw an error with the HTTP status
+          const errorText = await response.text(); // Get response as text to see HTML content
+          console.error(`HTTP error! Status: ${response.status}. Response: ${errorText}`);
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+
+        // Check Content-Type to ensure it's JSON
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          const errorText = await response.text();
+          console.error(`Expected JSON, but received: ${contentType}. Response: ${errorText}`);
+          throw new TypeError('Did not receive JSON response');
+        }
+
+        const journals = await response.json(); // This line was causing the SyntaxError
+        console.log(journals);
+        // Process your journals data
+      } catch (error) {
+        console.error('Error fetching journals:', error);
+        // Display an error message to the user
+      }
+    }
 
       // --- Sorting ---
       let sortDirection = {};
