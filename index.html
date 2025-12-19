@@ -413,7 +413,6 @@
   }
 }
 
-
       // --- Sorting ---
       let sortDirection = {};
       function sortJournals(journals, key = "changed") {
@@ -586,38 +585,38 @@
       });
 
       // --- Auto-update ---
-      async function autoUpdate() {
-        const oldTitles = allJournals.map((j) => ({
-          issn: j.issn,
-          title: j.title,
-        }));
-        await fetchJournals();
-        const changes = allJournals.some((j) => {
-          const o = oldTitles.find((ot) => ot.issn === j.issn);
-          return o && o.title !== j.title;
-        });
-        const now = new Date().toLocaleString();
-        updateMessage.textContent = changes
-          ? `New Update since ${now}`
-          : `No changes at ${now}`;
-      }
-      updateBtn.addEventListener("click", autoUpdate);
-      autoUpdateSelect.addEventListener("change", () => {
-        const interval = parseInt(autoUpdateSelect.value, 10);
-        if (autoUpdateInterval) {
-          clearInterval(autoUpdateInterval);
-          autoUpdateInterval = null;
-        }
-        if (interval > 0)
-          autoUpdateInterval = setInterval(autoUpdate, interval);
-      });
-      resetBtn.addEventListener(
-        "click",
-        () => (updateMessage.textContent = "No updates yet.")
-      );
+      async function autoUpdateWithLogging() {
+  const oldTitles = allJournals.map(j => ({ issn: j.issn, title: j.title }));
+  await fetchJournals();
 
-      // --- Initial load ---
-      window.addEventListener("load", fetchJournals);
+  const hasChanges = allJournals.some(j => {
+    const old = oldTitles.find(o => o.issn === j.issn);
+    return old && old.title !== j.title;
+  });
+
+  const now = new Date().toLocaleString();
+  updateMessage.textContent = hasChanges
+    ? `New Update since ${now}`
+    : `No changes at ${now}`;
+}
+
+// --- Set auto-update interval ---
+autoUpdateSelect.addEventListener("change", () => {
+  const intervalMs = parseInt(autoUpdateSelect.value, 10);
+  if (autoUpdateInterval) clearInterval(autoUpdateInterval);
+  if (intervalMs > 0) autoUpdateInterval = setInterval(autoUpdateWithLogging, intervalMs);
+});
+
+// --- Manual update ---
+updateBtn.addEventListener("click", autoUpdateWithLogging);
+
+// --- Reset notification ---
+resetBtn.addEventListener("click", () => {
+  updateMessage.textContent = "No updates yet.";
+});
+
+// --- Call fetch on page load ---
+window.addEventListener("load", fetchJournals);
     </script>
   </body>
 </html>
