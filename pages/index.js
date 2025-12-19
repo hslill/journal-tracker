@@ -170,163 +170,164 @@ export default function Home() {
   }, [search, fromDate, toDate, updatedOnly, activeLetter, allJournals, sortConfig]);
 
   return (
-    <div className={styles.container}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-        <img
-          src="https://d2jv02qf7xgjwx.cloudfront.net/accounts/129950/images/NYUL-Health_logo_Purple_RGB_300ppi.png"
-          alt="NYU Langone Health"
-          style={{ height: "auto", width: 200 }}
-        />
-        <span style={{ fontSize: "1rem", color: "#555" }}>
-          <strong>Health Sciences Library</strong>
-        </span>
-      </div>
+  <div className={styles.container}>
+    {/* Header */}
+    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+      <img
+        src="https://d2jv02qf7xgjwx.cloudfront.net/accounts/129950/images/NYUL-Health_logo_Purple_RGB_300ppi.png"
+        alt="NYU Langone Health"
+        style={{ height: "auto", width: 200 }}
+      />
+      <span style={{ fontSize: "1rem", color: "#555" }}>
+        <strong>Health Sciences Library</strong>
+      </span>
+    </div>
 
-      <h1>Journal Title Tracker</h1>
-      <p>Track changes in the journal titles over time.</p>
+    <h1>Journal Title Tracker</h1>
+    <p>Track changes in the journal titles over time.</p>
 
-      {/* Controls */}
-      <div className={styles.controls}>
-        <button onClick={autoUpdateWithLogging}>Update</button>
-        <select
-          value={autoUpdateIntervalId || 0}
-          onChange={(e) => {
-            const ms = parseInt(e.target.value, 10);
-            if (autoUpdateIntervalId) clearInterval(autoUpdateIntervalId);
-            if (ms > 0) {
-              const id = setInterval(autoUpdateWithLogging, ms);
-              setAutoUpdateIntervalId(id);
-            } else {
-              setAutoUpdateIntervalId(null);
-            }
-          }}
-        >
-          <option value="0">Off</option>
-          <option value="30000">30 seconds</option>
-          <option value="60000">1 minute</option>
-          <option value="3600000">1 hour</option>
-          <option value="86400000">1 day</option>
-        </select>
-        <span>{updateMessage}</span>
-      </div>
-
-      <div className={styles.controls}>
-        <input
-          type="text"
-          placeholder="Search ISSN or Title"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
-        <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
-        <label>
-          Updated only
-          <input
-            type="checkbox"
-            checked={updatedOnly}
-            onChange={(e) => setUpdatedOnly(e.target.checked)}
-          />
-        </label>
-        <button onClick={() => downloadCSV("all_journals.csv", filteredJournals)}>Export CSV</button>
-        <button
-          onClick={() =>
-            downloadCSV(
-              "changes_only.csv",
-              filteredJournals.filter((j) => j.changed)
-            )
+    {/* Controls */}
+    <div className={styles.controls}>
+      <button onClick={autoUpdateWithLogging}>Update</button>
+      <select
+        value={autoUpdateIntervalId || 0}
+        onChange={(e) => {
+          const ms = parseInt(e.target.value, 10);
+          if (autoUpdateIntervalId) clearInterval(autoUpdateIntervalId);
+          if (ms > 0) {
+            const id = setInterval(autoUpdateWithLogging, ms);
+            setAutoUpdateIntervalId(id);
+          } else {
+            setAutoUpdateIntervalId(null);
           }
-        >
-          Export Changes Only
-        </button>
-      </div>
+        }}
+      >
+        <option value="0">Off</option>
+        <option value="30000">30 seconds</option>
+        <option value="60000">1 minute</option>
+        <option value="3600000">1 hour</option>
+        <option value="86400000">1 day</option>
+      </select>
+      <span>{updateMessage}</span>
+    </div>
 
-      {/* Dashboard */}
-      <div className={styles.dashboard}>
-        <div className={styles.metric}>
-          <span className={styles.metricValue}>{total}</span>
-          <span className={styles.metricLabel}>Total Journals</span>
-        </div>
-        <div className={styles.metric}>
-          <span className={styles.metricValue}>{updated}</span>
-          <span className={styles.metricLabel}>Updated</span>
-        </div>
-        <div className={styles.metric}>
-          <span className={styles.metricValue}>{unchanged}</span>
-          <span className={styles.metricLabel}>Unchanged</span>
-        </div>
-      </div>
-
-      {/* A-Z Index */}
-      <div className={styles.indexBar}>
-        <button
-          className={activeLetter === "All" ? styles.activeIndex : ""}
-          onClick={() => handleLetterClick("All")}
-        >
-          All
-        </button>
-        {alphabet.map((l) => (
-          <button
-            key={l}
-            className={activeLetter === l ? styles.activeIndex : ""}
-            onClick={() => handleLetterClick(l)}
-          >
-            {l}
-          </button>
-        ))}
-      </div>
-
-      {/* Table */}
-      {loading && <div>Loading journals...</div>}
-      <table className={styles.table}>
-        <thead>
-          <tr>
-            <th onClick={() => handleSort("issn")}>ISSN</th>
-            <th onClick={() => handleSort("title")}>Title</th>
-            <th onClick={() => handleSort("previousTitle")}>Previous Title</th>
-            <th onClick={() => handleSort("changed")}>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredJournals.map((j, i) => (
-            <React.Fragment key={j.issn}>
-              <tr className={j.changed ? styles.changedRow : styles.unchangedRow}>
-                <td>{j.issn}</td>
-                <td title={j.title}><span className={styles.truncate}>{j.title}</span></td>
-                <td>{j.previousTitle || "-"}</td>
-                <td>
-                  <span className={j.changed ? styles.statusUpdated : styles.statusUnchanged}>
-                    {j.changed ? "Updated" : "Unchanged"}
-                  </span>
-                  <button onClick={() => toggleRowExpansion(i)}>
-                    {j.expanded ? "▾" : "▸"}
-                  </button>
-                </td>
-              </tr>
-              {j.expanded && (
-                <tr className={styles.detailsRow}>
-                  <td colSpan={4}>
-                    <div className={styles.details}>
-                      <div><strong>ISSN:</strong> {j.issn}</div>
-                      <div><strong>Previous Title:</strong> {j.previousTitle || "-"}</div>
-                      <div><strong>Last Checked:</strong> {j.dateChecked || "-"}</div>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </React.Fragment>
-          ))}
-        </tbody>
-      </table>
-
-      <button onClick={toggleExpandAllRows}>
-        {expandAll ? "Collapse All" : "Expand All"}
+    <div className={styles.controls}>
+      <input
+        type="text"
+        placeholder="Search ISSN or Title"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+      <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+      <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+      <label>
+        Updated only
+        <input
+          type="checkbox"
+          checked={updatedOnly}
+          onChange={(e) => setUpdatedOnly(e.target.checked)}
+        />
+      </label>
+      <button onClick={() => downloadCSV("all_journals.csv", filteredJournals)}>Export CSV</button>
+      <button
+        onClick={() =>
+          downloadCSV(
+            "changes_only.csv",
+            filteredJournals.filter((j) => j.changed)
+          )
+        }
+      >
+        Export Changes Only
       </button>
+    </div>
 
-      {/* Stats */}
-      <div>
-        <strong>Total:</strong> {total} | <strong>Updated:</strong> {updated} | <strong>Unchanged:</strong> {unchanged}
+    {/* Dashboard */}
+    <div className={styles.dashboard}>
+      <div className={styles.metric}>
+        <span className={styles.metricValue}>{total}</span>
+        <span className={styles.metricLabel}>Total Journals</span>
+      </div>
+      <div className={styles.metric}>
+        <span className={styles.metricValue}>{updated}</span>
+        <span className={styles.metricLabel}>Updated</span>
+      </div>
+      <div className={styles.metric}>
+        <span className={styles.metricValue}>{unchanged}</span>
+        <span className={styles.metricLabel}>Unchanged</span>
       </div>
     </div>
-  );
+
+    {/* A-Z Index */}
+    <div className={styles.indexBar}>
+      <button
+        className={activeLetter === "All" ? styles.activeIndex : ""}
+        onClick={() => handleLetterClick("All")}
+      >
+        All
+      </button>
+      {alphabet.map((l) => (
+        <button
+          key={l}
+          className={activeLetter === l ? styles.activeIndex : ""}
+          onClick={() => handleLetterClick(l)}
+        >
+          {l}
+        </button>
+      ))}
+    </div>
+
+    {/* Table */}
+    {loading && <div>Loading journals...</div>}
+    <table className={styles.table}>
+      <thead>
+        <tr>
+          <th onClick={() => handleSort("issn")}>ISSN</th>
+          <th onClick={() => handleSort("title")}>Title</th>
+          <th onClick={() => handleSort("previousTitle")}>Previous Title</th>
+          <th onClick={() => handleSort("changed")}>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {filteredJournals.map((j, i) => (
+          <React.Fragment key={j.issn}>
+            <tr className={j.changed ? styles.changedRow : styles.unchangedRow}>
+              <td>{j.issn}</td>
+              <td title={j.title}><span className={styles.truncate}>{j.title}</span></td>
+              <td>{j.previousTitle || "-"}</td>
+              <td>
+                <span className={j.changed ? styles.statusUpdated : styles.statusUnchanged}>
+                  {j.changed ? "Updated" : "Unchanged"}
+                </span>
+                <button onClick={() => toggleRowExpansion(i)}>
+                  {j.expanded ? "▾" : "▸"}
+                </button>
+              </td>
+            </tr>
+            {j.expanded && (
+              <tr className={styles.detailsRow}>
+                <td colSpan={4}>
+                  <div className={styles.details}>
+                    <div><strong>ISSN:</strong> {j.issn}</div>
+                    <div><strong>Previous Title:</strong> {j.previousTitle || "-"}</div>
+                    <div><strong>Last Checked:</strong> {j.dateChecked || "-"}</div>
+                  </div>
+                </td>
+              </tr>
+            )}
+          </React.Fragment>
+        ))}
+      </tbody>
+    </table>
+
+    <button onClick={toggleExpandAllRows}>
+      {expandAll ? "Collapse All" : "Expand All"}
+    </button>
+
+    {/* Stats */}
+    <div>
+      <strong>Total:</strong> {total} | <strong>Updated:</strong> {updated} | <strong>Unchanged:</strong> {unchanged}
+    </div>
+  </div>
+);
+
 }
