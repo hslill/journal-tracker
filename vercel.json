@@ -1,6 +1,9 @@
 {
   "version": 2,
   "builds": [
-    { "src": "index.html", "use": "@vercel/static" }
+    {
+      "src": "package.json",
+      "use": "@vercel/next"
+    }
   ]
 }
