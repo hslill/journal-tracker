@@ -394,24 +394,25 @@
 
       // --- Fetch journals ---
       async function fetchJournals() {
-        try {
-          const res = await fetch("alljournals/journals.json");
-          const data = await res.json();
-          allJournals = data.map((j) => ({
-            issn: j.issn,
-            title: j.title,
-            previousTitle: j.oldTitle || null,
-            changed: j.oldTitle && j.oldTitle !== j.title,
-            dateChecked: new Date().toISOString().split("T")[0],
-          }));
-          filteredJournals = allJournals.slice();
-          renderOffset = 0;
-          renderTable(filteredJournals);
-        } catch (err) {
-          console.error("Error fetching journals:", err);
-          allJournals = [];
-        }
-      }
+  try {
+    const res = await fetch("alljournals/journals.json"); // <-- direct path
+    const data = await res.json();
+    allJournals = data.map(j => ({
+      issn: j.issn,
+      title: j.title,
+      previousTitle: j.oldTitle || null,
+      changed: j.oldTitle && j.oldTitle !== j.title,
+      dateChecked: new Date().toISOString().split("T")[0]
+    }));
+    filteredJournals = allJournals.slice();
+    renderOffset = 0;
+    renderTable(filteredJournals);
+  } catch (err) {
+    console.error("Error fetching journals:", err);
+    allJournals = [];
+  }
+}
+
 
       // --- Sorting ---
       let sortDirection = {};
