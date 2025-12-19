@@ -1,10 +1,11 @@
 {
   "version": 2,
-  "public": true,
   "builds": [
+    { "src": "pages/api/alljournals.js", "use": "@vercel/node" },
     { "src": "index.html", "use": "@vercel/static" }
   ],
   "routes": [
+    { "src": "/alljournals", "dest": "/pages/api/alljournals.js" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
