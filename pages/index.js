@@ -146,20 +146,46 @@ export default function Home() {
   }
 
   // --- Auto-update ---
-  async function autoUpdateWithLogging() {
-    const oldTitles = allJournals.map((j) => ({ issn: j.issn, title: j.title }));
-    await fetchJournals();
-    const hasChanges = allJournals.some((j) => {
-      const old = oldTitles.find((o) => o.issn === j.issn);
-      return old && old.title !== j.title;
-    });
-    const now = new Date().toLocaleString();
-    setUpdateMessage(
-      hasChanges
-        ? `New Update since ${now}`
-        : `No changes at ${now}`
-    );
+async function autoUpdateWithLogging() {
+  const oldTitles = allJournals.map((j) => ({ issn: j.issn, title: j.title }));
+
+  setLoading(true);
+  let newJournals = [];
+  try {
+    const res = await fetch("/api/alljournals");
+    if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
+    const data = await res.json();
+
+    newJournals = data.map((j) => ({
+      issn: j.issn,
+      title: j.title,
+      previousTitle: j.oldTitle || null,
+      changed: j.oldTitle && j.oldTitle !== j.title,
+      dateChecked: new Date().toISOString().split("T")[0],
+      expanded: false,
+    }));
+
+    setAllJournals(newJournals);
+  } catch (err) {
+    console.error("Error fetching journals:", err);
+    alert("Error fetching journals: " + err.message);
+  } finally {
+    setLoading(false);
   }
+
+  const hasChanges = newJournals.some((j) => {
+    const old = oldTitles.find((o) => o.issn === j.issn);
+    return old && old.title !== j.title;
+  });
+
+  const now = new Date().toLocaleString();
+  setUpdateMessage(
+    hasChanges
+      ? `New Update since ${now}`
+      : `No changes at ${now}`
+  );
+}
+
 
   useEffect(() => {
     fetchJournals();
