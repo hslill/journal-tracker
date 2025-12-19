@@ -395,7 +395,7 @@
       // --- Fetch journals ---
       async function fetchJournals() {
         try {
-          const res = await fetch("/alljournals");
+          const res = await fetch("alljournals/journals.json");
           const data = await res.json();
           allJournals = data.map((j) => ({
             issn: j.issn,
