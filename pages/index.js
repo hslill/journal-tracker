@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import styles from "../styles/Home.module.css";
 
 export default function Home() {
@@ -25,9 +25,10 @@ export default function Home() {
     setLoading(true);
     try {
       const res = await fetch("/api/alljournals");
-      if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
       const data = await res.json();
 
+      // Map data to include extra UI fields
       const mapped = data.map((j) => ({
         issn: j.issn,
         title: j.title,
@@ -39,34 +40,15 @@ export default function Home() {
 
       setAllJournals(mapped);
       setFilteredJournals(mapped);
-      return mapped; // return for auto-update comparison
     } catch (err) {
       console.error("Error fetching journals:", err);
       alert("Error fetching journals: " + err.message);
-      return [];
     } finally {
       setLoading(false);
     }
   }
 
-  // --- Auto-update with logging ---
-  async function autoUpdateWithLogging() {
-    const oldTitles = allJournals.map((j) => ({ issn: j.issn, title: j.title }));
-
-    const newJournals = await fetchJournals();
-
-    const hasChanges = newJournals.some((j) => {
-      const old = oldTitles.find((o) => o.issn === j.issn);
-      return old && old.title !== j.title;
-    });
-
-    const now = new Date().toLocaleString();
-    setUpdateMessage(
-      hasChanges ? `New Update since ${now}` : `No changes at ${now}`
-    );
-  }
-
-  // --- Apply filters & sorting ---
+  // --- Apply filters ---
   function applyFilters() {
     let filtered = [...allJournals];
 
@@ -78,27 +60,19 @@ export default function Home() {
       );
     }
 
-    if (fromDate) {
-      filtered = filtered.filter(
-        (j) => new Date(j.dateChecked) >= new Date(fromDate)
-      );
-    }
-
-    if (toDate) {
-      filtered = filtered.filter(
-        (j) => new Date(j.dateChecked) <= new Date(toDate)
-      );
-    }
+    if (fromDate)
+      filtered = filtered.filter((j) => new Date(j.dateChecked) >= new Date(fromDate));
+    if (toDate)
+      filtered = filtered.filter((j) => new Date(j.dateChecked) <= new Date(toDate));
 
     if (updatedOnly) filtered = filtered.filter((j) => j.changed);
 
-    if (activeLetter !== "All") {
+    if (activeLetter !== "All")
       filtered = filtered.filter(
         (j) => j.title && j.title[0].toUpperCase() === activeLetter
       );
-    }
 
-    // Sorting
+    // --- Sorting ---
     if (sortConfig.key) {
       filtered.sort((a, b) => {
         let valA = a[sortConfig.key];
@@ -121,7 +95,7 @@ export default function Home() {
     setFilteredJournals(filtered);
   }
 
-  // --- CSV Export ---
+  // --- CSV export ---
   function downloadCSV(filename, journals) {
     const header = ["ISSN", "Title", "Previous Title", "Status"];
     const rows = journals.map((j) => [
@@ -130,8 +104,9 @@ export default function Home() {
       j.previousTitle || "",
       j.changed ? "Updated" : "Unchanged",
     ]);
-    const csv = [header, ...rows].map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
-
+    const csv = [header, ...rows]
+      .map((r) => r.map((c) => `"${c}"`).join(","))
+      .join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -141,7 +116,7 @@ export default function Home() {
     URL.revokeObjectURL(url);
   }
 
-  // --- Row expand/collapse ---
+  // --- Expand/collapse rows ---
   function toggleRowExpansion(index) {
     const updated = [...filteredJournals];
     updated[index].expanded = !updated[index].expanded;
@@ -154,17 +129,31 @@ export default function Home() {
     setExpandAll(!expandAll);
   }
 
-  // --- A-Z index ---
-  function handleLetterClick(letter) {
-    setActiveLetter(letter);
-  }
-
   // --- Sorting handler ---
   function handleSort(key) {
     setSortConfig((prev) => ({
       key,
       asc: prev.key === key ? !prev.asc : true,
     }));
+  }
+
+  // --- Letter index handler ---
+  function handleLetterClick(letter) {
+    setActiveLetter(letter);
+  }
+
+  // --- Auto-update with logging ---
+  async function autoUpdateWithLogging() {
+    const oldTitles = allJournals.map((j) => ({ issn: j.issn, title: j.title }));
+    await fetchJournals();
+
+    const hasChanges = allJournals.some((j) => {
+      const old = oldTitles.find((o) => o.issn === j.issn);
+      return old && old.title !== j.title;
+    });
+
+    const now = new Date().toLocaleString();
+    setUpdateMessage(hasChanges ? `New Update since ${now}` : `No changes at ${now}`);
   }
 
   // --- Metrics ---
@@ -182,6 +171,7 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, fromDate, toDate, updatedOnly, activeLetter, allJournals, sortConfig]);
 
+  // --- Render ---
   return (
     <div className={styles.container}>
       {/* Header */}
@@ -243,18 +233,16 @@ export default function Home() {
         </label>
         <button onClick={() => downloadCSV("all_journals.csv", filteredJournals)}>Export CSV</button>
         <button
-          onClick={() =>
-            downloadCSV(
-              "changes_only.csv",
-              filteredJournals.filter((j) => j.changed)
-            )
-          }
+          onClick={() => downloadCSV(
+            "changes_only.csv",
+            filteredJournals.filter((j) => j.changed)
+          )}
         >
           Export Changes Only
         </button>
       </div>
 
-      {/* Dashboard */}
+      {/* Metrics */}
       <div className={styles.dashboard}>
         <div className={styles.metric}>
           <span className={styles.metricValue}>{total}</span>
@@ -289,7 +277,7 @@ export default function Home() {
         ))}
       </div>
 
-      {/* Table */}
+      {/* Journal Table */}
       {loading && <div>Loading journals...</div>}
       <table className={styles.table}>
         <thead>
@@ -336,7 +324,7 @@ export default function Home() {
         {expandAll ? "Collapse All" : "Expand All"}
       </button>
 
-      {/* Stats */}
+      {/* Footer Stats */}
       <div>
         <strong>Total:</strong> {total} | <strong>Updated:</strong> {updated} | <strong>Unchanged:</strong> {unchanged}
       </div>
